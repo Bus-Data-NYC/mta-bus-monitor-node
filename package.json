@@ -1,0 +1,34 @@
+{
+  "name": "mta-bus-monitor-node",
+  "version": "0.0.0",
+  "description": "Parse 30 second interval SIRI feed",
+  "main": "index.js",
+  "scripts": {
+    "test": "npm test",
+    "start": "node app.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Bus-Data-NYC/mta-bus-monitor-node"
+  },
+  "keywords": [
+    "bus",
+    "nyc",
+    "transit",
+    "civic-tech"
+  ],
+  "author": "Kuan Butts",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Bus-Data-NYC/mta-bus-monitor-node"
+  },
+  "homepage": "https://github.com/kuanb/nyc-bus",
+  "dependencies": {
+    "body-parser": "^1.13.3",
+    "bower": "^1.5.2",
+    "express": "^4.13.3",
+    "mongodb": "^2.0.46",
+    "mongoose": "^4.1.11",
+    "request": "^2.65.0"
+  }
+}
