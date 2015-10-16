@@ -27,46 +27,46 @@ var url = 'http://api.prod.obanyc.com/api/siri/vehicle-monitoring.json?key=' + c
 
 function requestWithEncoding (url, callback) {
 	var headers = {
-	  "accept-charset" : "ISO-8859-1,utf-8;q=0.7,*;q=0.3",
-	  "accept-language" : "en-US,en;q=0.8",
-	  "accept" : "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-	  "user-agent" : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_6_8) AppleWebKit/537.13+ (KHTML, like Gecko) Version/5.1.7 Safari/534.57.2",
-	  "accept-encoding" : "gzip,deflate",
+		"accept-charset" : "ISO-8859-1,utf-8;q=0.7,*;q=0.3",
+		"accept-language" : "en-US,en;q=0.8",
+		"accept" : "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+		"user-agent" : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_6_8) AppleWebKit/537.13+ (KHTML, like Gecko) Version/5.1.7 Safari/534.57.2",
+		"accept-encoding" : "gzip,deflate",
 	};
 
 	var options = {
-	  url: url,
-	  headers: headers
+		url: url,
+		headers: headers
 	};
 
-  var req = request.get(options);
+	var req = request.get(options);
 
-  req.on('response', function(res) {
-    var chunks = [];
-    res.on('data', function(chunk) {
-      chunks.push(chunk);
-    });
+	req.on('response', function(res) {
+		var chunks = [];
+		res.on('data', function(chunk) {
+			chunks.push(chunk);
+		});
 
-    res.on('end', function() {
-      var buffer = Buffer.concat(chunks);
-      var encoding = res.headers['content-encoding'];
-      if (encoding == 'gzip') {
-        zlib.gunzip(buffer, function(err, decoded) {
-          callback(err, decoded && decoded.toString());
-        });
-      } else if (encoding == 'deflate') {
-        zlib.inflate(buffer, function(err, decoded) {
-          callback(err, decoded && decoded.toString());
-        })
-      } else {
-        callback(null, buffer.toString());
-      }
-    });
-  });
+		res.on('end', function() {
+			var buffer = Buffer.concat(chunks);
+			var encoding = res.headers['content-encoding'];
+			if (encoding == 'gzip') {
+				zlib.gunzip(buffer, function(err, decoded) {
+					callback(err, decoded && decoded.toString());
+				});
+			} else if (encoding == 'deflate') {
+				zlib.inflate(buffer, function(err, decoded) {
+					callback(err, decoded && decoded.toString());
+				})
+			} else {
+				callback(null, buffer.toString());
+			}
+		});
+	});
 
-  req.on('error', function(err) {
-    callback(err);
-  });
+	req.on('error', function(err) {
+		callback(err);
+	});
 }
 
 
@@ -161,10 +161,10 @@ function csvBundler (vehicles) {
 
 
 requestWithEncoding(url, function(err, data) {
-  if (err) {
-  	console.log('Error on request: ', err);
-  } else {
-  	var vehicles = resProcessor(data);
+	if (err) {
+		console.log('Error on request: ', err);
+	} else {
+		var vehicles = resProcessor(data);
 
 		// convert each obj in array to a list/array
 		vehicles = vehicles.map(function (veh) {
@@ -175,16 +175,16 @@ requestWithEncoding(url, function(err, data) {
 			});
 			return res;
 		}); console.log(vehicles[4])
-  	
-  	csvBundler(vehicles);
-  }
+		
+		csvBundler(vehicles);
+	}
 })
 
 
 
 var server = app.listen(3000, function () {
-  var host = server.address().address;
-  var port = server.address().port;
+	var host = server.address().address;
+	var port = server.address().port;
 
-  console.log('Bus app listening at http://%s:%s', host, port);
+	console.log('Bus app listening at http://%s:%s', host, port);
 });
