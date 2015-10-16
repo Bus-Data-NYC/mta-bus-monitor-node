@@ -70,7 +70,7 @@ function requestWithEncoding (url, callback) {
 }
 
 
-function resProcessor (data) {
+function processVehs (data) {
 	data = JSON.parse(data);
 	var curTime = Date.now();
 	if (data.Siri !== undefined && data.Siri.ServiceDelivery !== undefined) {
@@ -146,17 +146,20 @@ function resProcessor (data) {
 function csvBundler (vehicles) {
 	var cols = ['timestamp', 'vehicle_id', 'latitude', 'longitude', 'bearing', 'progress', 'service_date', 'trip_id', 'block_assigned', 'next_stop_id', 'dist_along_route', 'dist_from_stop'];
 	vehicles = cols + '\r\n' + vehicles.join('\r\n') + '\r\n';
-	var rte_path = 'saves';
+
+	var t = new Date(Date.now()).toISOString().split('T');
+
+	var rte_path = 'store/' + t[0];
 	mkdirp(rte_path, function (err) {
 		if (err) { 
 			console.error('Failed to make file path. Error: ' + err);
 		} else {
-			rte_path += '/test.csv';
+			rte_path += '/' + t[1].split('.')[0].split(':').join('') + '.csv';
 			fs.writeFile(rte_path, vehicles, function (err) {
 				if (err) {
-					console.error('Failed to write file. Error: ' + err);
+					console.error('Failed to write file at day ' + t[0] + ' at time ' + t[1] + '. Error: ' + err);
 				} else {
-					console.log('Write success.')
+					console.log('Write success for day ' + t[0] + ' at time ' + t[1] + '.')
 				}
 			});
 		}
@@ -164,27 +167,40 @@ function csvBundler (vehicles) {
 }
 
 
+function run (alt) {
+	requestWithEncoding(url, function(err, data) {
+		// if alt method start timer for next call now
+		if (alt == true) {
+			setTimeout(function () { run(true); }, 30000);
+		}
 
-requestWithEncoding(url, function(err, data) {
-	if (err) {
-		console.log('Error on request: ', err);
-	} else {
-		var vehicles = resProcessor(data);
+		if (err) {
+			var t = new Date(Date.now()).toISOString().split('T');
+			console.log('Error on request at day ' + t[0] + ' at time ' + t[1] + '. Error: ', err);
+		} else {
+			var vehicles = processVehs(data);
 
-		// convert each obj in array to a list/array
-		vehicles = vehicles.map(function (veh) {
-			var keys = Object.keys(veh);
-			var res = []
-			keys.forEach(function (key) {
-				res.push(veh[key]);
-			});
-			return res;
-		}); 
-		
-		csvBundler(vehicles);
-	}
-})
+			// convert each obj in array to a list/array
+			vehicles = vehicles.map(function (veh) {
+				var keys = Object.keys(veh);
+				var res = []
+				keys.forEach(function (key) {
+					res.push(veh[key]);
+				});
+				return res;
+			}); 
+			
+			csvBundler(vehicles);
+		}
+	})
+}
 
+
+// METHOD 1: run this every 30 seconds
+// setInterval(function () { run(false); }, 30000);
+
+// METHOD 2: run this every 30 seconds AFTER 1st success
+run(true);
 
 
 var server = app.listen(3000, function () {
