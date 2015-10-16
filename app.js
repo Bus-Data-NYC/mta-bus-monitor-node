@@ -16,59 +16,26 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));
 
 
-// up and running with mongodb
-var mongoose = require('mongoose'),
-		dbLoc = 'mongodb://localhost:27017/' + credentials.dbname;
-mongoose.connect(dbLoc);
 
 
-// model schemas
-var Schema = mongoose.Schema;
-var routeSchema = new Schema({
-  routeId:  String,
-  comments: [{ body: String, date: Date }],
-  date: { type: Date, default: Date.now }
-});
-
-
-function resProcessor (data) {
-	data = JSON.parse(data);
-	var curTime = Date.now();
-	if (data.Siri !== undefined && data.Siri.ServiceDelivery !== undefined) {
-		var del = data.Siri.ServiceDelivery,
-				time = new Date(del.ResponseTimestamp).getTime(),
-				vehs = del.VehicleMonitoringDelivery[0],
-				warn = del.SituationExchangeDelivery[0];
-
-		// handle all vehicle results
-		var active = vehs[0].VehicleActivity
-		if (active !== undefined) {
-			active.forEach(function (ea) {
-
-			});
-		}
-	} else {
-		curTime = new Date(curTime).toString()
-		console.log('Error on results processor at time ' + curTim);
-	}
-};
+var url = 'http://api.prod.obanyc.com/api/siri/vehicle-monitoring.json?key=' + credentials.mtakey;
 
 
 
-var headers = {
-  "accept-charset" : "ISO-8859-1,utf-8;q=0.7,*;q=0.3",
-  "accept-language" : "en-US,en;q=0.8",
-  "accept" : "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-  "user-agent" : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_6_8) AppleWebKit/537.13+ (KHTML, like Gecko) Version/5.1.7 Safari/534.57.2",
-  "accept-encoding" : "gzip,deflate",
-};
+function requestWithEncoding (url, callback) {
+	var headers = {
+	  "accept-charset" : "ISO-8859-1,utf-8;q=0.7,*;q=0.3",
+	  "accept-language" : "en-US,en;q=0.8",
+	  "accept" : "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+	  "user-agent" : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_6_8) AppleWebKit/537.13+ (KHTML, like Gecko) Version/5.1.7 Safari/534.57.2",
+	  "accept-encoding" : "gzip,deflate",
+	};
 
-var options = {
-  url: 'http://api.prod.obanyc.com/api/siri/vehicle-monitoring.json?key=' + credentials.mtakey,
-  headers: headers
-};
+	var options = {
+	  url: url,
+	  headers: headers
+	};
 
-var requestWithEncoding = function(options, callback) {
   var req = request.get(options);
 
   req.on('response', function(res) {
@@ -99,11 +66,97 @@ var requestWithEncoding = function(options, callback) {
   });
 }
 
-requestWithEncoding(options, function(err, data) {
+
+function resProcessor (data) {
+	data = JSON.parse(data);
+	var curTime = Date.now();
+	if (data.Siri !== undefined && data.Siri.ServiceDelivery !== undefined) {
+		var del = data.Siri.ServiceDelivery,
+				vehs = del.VehicleMonitoringDelivery[0],
+				warn = del.SituationExchangeDelivery[0];
+
+		// handle all vehicle results
+		var vehicles = [];
+		var active = vehs.VehicleActivity
+		if (active !== undefined || active.length > 0) {
+			active.forEach(function (veh, i) {
+				var mvj = veh.MonitoredVehicleJourney;
+				var newData = {
+					timestamp_utc: new Date(veh.RecordedAtTime).getTime(),
+					vehicle_id: mvj.VehicleRef.split("_")[1],
+					latitude: String(parseFloat(mvj.VehicleLocation.Latitude.toFixed(3))),
+					longitude: String(parseFloat(mvj.VehicleLocation.Longitude.toFixed(3))),
+					bearing: String(parseFloat(mvj.Bearing.toFixed(3))),
+					progress: null,
+					service_date: mvj.FramedVehicleJourneyRef.DataFrameRef.split("-").join(""),
+					trip_id: mvj.FramedVehicleJourneyRef.DatedVehicleJourneyRef.slice(mvj.FramedVehicleJourneyRef.DatedVehicleJourneyRef.indexOf("_")+1),
+					block_assigned: null,
+					next_stop_id: null,
+					dist_along_route: null,
+					dist_from_stop: null
+				};
+
+				if (mvj.ProgressRate == 'normalProgress') {
+					newData.progress = String(0); // normal prog
+				} else if (mvj.ProgressRate !== undefined) {
+					newData.progress = String(2); // layover
+				} else {
+					newData.progress = String(1); // no progress
+				}
+
+				if (mvj.BlockRef == undefined) {
+					newData.block_assigned = String(1);
+				} else {
+					newData.block_assigned = String(0);
+				}
+
+				if (mvj.MonitoredCall == undefined) {
+					newData.next_stop_id = '\N';
+					newData.dist_along_route = '\N';
+					newData.dist_from_stop = '\N';
+				} else {
+					newData.next_stop_id = mvj.MonitoredCall.StopPointRef.slice(4);
+					newData.dist_along_route = String(mvj.MonitoredCall.Extensions.Distances.CallDistanceAlongRoute.toFixed(1));
+					newData.dist_from_stop = String(mvj.MonitoredCall.Extensions.Distances.DistanceFromCall.toFixed(1));
+					// reduce zeroes for the hell of it
+					if (newData.dist_along_route == '0.0') { newData.dist_along_route = '0'; }
+					if (newData.dist_from_stop == '0.0') { newData.dist_along_route = '0'; }
+				}
+
+				vehicles.push(newData)
+			});
+			
+			return vehicles;
+		}
+	} else {
+		curTime = new Date(curTime).toString()
+		console.log('Errored/empty results processor at time ' + curTim);
+	}
+};
+
+
+function csvBundler (vehicles) {
+	// convert each obj in array to a list/array
+	vehicles.map(function (veh) {
+		var keys = Object.keys(veh);
+		var res = []
+		keys.forEach(function (key) {
+			res.push(veh[key]);
+		});
+		return res;
+	});
+
+	vehicles = vehicles.join('\r\n');
+}
+
+
+
+requestWithEncoding(url, function(err, data) {
   if (err) {
   	console.log('Error on request: ', err);
   } else {
-  	console.log('Worked');
+  	var vehicles = resProcessor(data);
+  	csvBundler(vehicles);
   }
 })
 

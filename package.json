@@ -27,8 +27,6 @@
     "body-parser": "^1.13.3",
     "bower": "^1.5.2",
     "express": "^4.13.3",
-    "mongodb": "^2.0.46",
-    "mongoose": "^4.1.11",
     "request": "^2.65.0"
   }
 }
