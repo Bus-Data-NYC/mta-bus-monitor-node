@@ -7,7 +7,10 @@ app.use('/bower_components',  express.static(__dirname + '/bower_components'));
 
 var http = require('http');
 var request = require('request');
+
 var zlib = require('zlib');
+var fs = require('fs');
+var mkdirp = require('mkdirp').mkdirp;
 
 var credentials = require('./credentials.js');
 
@@ -136,17 +139,23 @@ function resProcessor (data) {
 
 
 function csvBundler (vehicles) {
-	// convert each obj in array to a list/array
-	vehicles.map(function (veh) {
-		var keys = Object.keys(veh);
-		var res = []
-		keys.forEach(function (key) {
-			res.push(veh[key]);
-		});
-		return res;
+	var cols = Object.keys(vehicles[0]).join('\r\n') + '\r\n';
+	vehicles = cols + vehicles.join('\r\n') + '\r\n';
+	var rte_path = 'saves';
+	mkdirp(rte_path, function (err) {
+		if (err) { 
+			console.error('Failed to make file path. Error: ' + err);
+		} else {
+			rte_path += '/test.csv';
+			fs.writeFile(rte_path, vehicles, function (err) {
+				if (err) {
+					console.error('Failed to write file. Error: ' + err);
+				} else {
+					console.log('Write success.')
+				}
+			});
+		}
 	});
-
-	vehicles = vehicles.join('\r\n');
 }
 
 
@@ -156,6 +165,17 @@ requestWithEncoding(url, function(err, data) {
   	console.log('Error on request: ', err);
   } else {
   	var vehicles = resProcessor(data);
+
+		// convert each obj in array to a list/array
+		vehicles = vehicles.map(function (veh) {
+			var keys = Object.keys(veh);
+			var res = []
+			keys.forEach(function (key) {
+				res.push(veh[key]);
+			});
+			return res;
+		}); console.log(vehicles[4])
+  	
   	csvBundler(vehicles);
   }
 })
