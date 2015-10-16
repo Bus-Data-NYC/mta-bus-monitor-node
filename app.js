@@ -85,11 +85,11 @@ function resProcessor (data) {
 			active.forEach(function (veh, i) {
 				var mvj = veh.MonitoredVehicleJourney;
 				var newData = {
-					timestamp_utc: new Date(veh.RecordedAtTime).getTime(),
+					timestamp: null,
 					vehicle_id: mvj.VehicleRef.split("_")[1],
-					latitude: String(parseFloat(mvj.VehicleLocation.Latitude.toFixed(3))),
-					longitude: String(parseFloat(mvj.VehicleLocation.Longitude.toFixed(3))),
-					bearing: String(parseFloat(mvj.Bearing.toFixed(3))),
+					latitude: String(parseFloat(mvj.VehicleLocation.Latitude.toFixed(6))),
+					longitude: String(parseFloat(mvj.VehicleLocation.Longitude.toFixed(6))),
+					bearing: String(parseFloat(mvj.Bearing.toFixed(2))),
 					progress: null,
 					service_date: mvj.FramedVehicleJourneyRef.DataFrameRef.split("-").join(""),
 					trip_id: mvj.FramedVehicleJourneyRef.DatedVehicleJourneyRef.slice(mvj.FramedVehicleJourneyRef.DatedVehicleJourneyRef.indexOf("_")+1),
@@ -98,6 +98,11 @@ function resProcessor (data) {
 					dist_along_route: null,
 					dist_from_stop: null
 				};
+
+				// convert timestamp to utc
+				var ts = new Date(veh.RecordedAtTime);
+				var t_utc = new Date(ts.getUTCFullYear(), ts.getUTCMonth(), ts.getUTCDate(),  ts.getUTCHours(), ts.getUTCMinutes(), ts.getUTCSeconds());
+				newData.timestamp = t_utc.toISOString().split(".")[0] + "Z";
 
 				if (mvj.ProgressRate == 'normalProgress') {
 					newData.progress = String(0); // normal prog
@@ -119,8 +124,8 @@ function resProcessor (data) {
 					newData.dist_from_stop = '\N';
 				} else {
 					newData.next_stop_id = mvj.MonitoredCall.StopPointRef.slice(4);
-					newData.dist_along_route = String(mvj.MonitoredCall.Extensions.Distances.CallDistanceAlongRoute.toFixed(1));
-					newData.dist_from_stop = String(mvj.MonitoredCall.Extensions.Distances.DistanceFromCall.toFixed(1));
+					newData.dist_along_route = String(mvj.MonitoredCall.Extensions.Distances.CallDistanceAlongRoute.toFixed(2));
+					newData.dist_from_stop = String(mvj.MonitoredCall.Extensions.Distances.DistanceFromCall.toFixed(2));
 					// reduce zeroes for the hell of it
 					if (newData.dist_along_route == '0.0') { newData.dist_along_route = '0'; }
 					if (newData.dist_from_stop == '0.0') { newData.dist_along_route = '0'; }
@@ -139,8 +144,8 @@ function resProcessor (data) {
 
 
 function csvBundler (vehicles) {
-	var cols = Object.keys(vehicles[0]).join('\r\n') + '\r\n';
-	vehicles = cols + vehicles.join('\r\n') + '\r\n';
+	var cols = ['timestamp', 'vehicle_id', 'latitude', 'longitude', 'bearing', 'progress', 'service_date', 'trip_id', 'block_assigned', 'next_stop_id', 'dist_along_route', 'dist_from_stop'];
+	vehicles = cols + '\r\n' + vehicles.join('\r\n') + '\r\n';
 	var rte_path = 'saves';
 	mkdirp(rte_path, function (err) {
 		if (err) { 
@@ -174,7 +179,7 @@ requestWithEncoding(url, function(err, data) {
 				res.push(veh[key]);
 			});
 			return res;
-		}); console.log(vehicles[4])
+		}); 
 		
 		csvBundler(vehicles);
 	}
