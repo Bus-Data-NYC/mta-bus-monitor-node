@@ -170,7 +170,7 @@ function csvBundler (vehicles) {
 function run (alt) {
 	requestWithEncoding(url, function(err, data) {
 		// if alt method start timer for next call now
-		if (alt == true) {
+		if (alt == true && intervalGlobal == true) {
 			setTimeout(function () { run(true); }, 30000);
 		}
 
@@ -196,11 +196,24 @@ function run (alt) {
 }
 
 
+var intervalGlobal = null;
+
 // METHOD 1: run this every 30 seconds
-// setInterval(function () { run(false); }, 30000);
+console.log('Starting operation.')
+intervalGlobal = setInterval(function () { run(false); }, 30000);
+setTimeout(function () {
+	clearInterval(intervalGlobal);
+	console.log('Finished operation.');
+}, 600000);
 
 // METHOD 2: run this every 30 seconds AFTER 1st success
+console.log('Starting operation.');
 run(true);
+intervalGlobal = true;
+setTimeout(function () {
+	intervalGlobal = false;
+	console.log('Finished operation.');
+}, 600000);
 
 
 var server = app.listen(3000, function () {
