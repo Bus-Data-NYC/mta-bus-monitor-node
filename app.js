@@ -20,12 +20,7 @@ app.use(bodyParser.urlencoded({extended: true}));
 
 
 
-
-var url = 'http://api.prod.obanyc.com/api/siri/vehicle-monitoring.json?key=' + credentials.mtakey;
-
-
-
-function requestWithEncoding (url, callback) {
+function requestWithEncoding (url, method, callback) {
 	var headers = {
 		"accept-charset" : "ISO-8859-1,utf-8;q=0.7,*;q=0.3",
 		"accept-language" : "en-US,en;q=0.8",
@@ -42,8 +37,20 @@ function requestWithEncoding (url, callback) {
 	var req = request.get(options);
 
 	req.on('response', function(res) {
-		var chunks = [];
+		// if method start timer for next call now
+		if (method == 1 && intervalGlobal == true) {
+			setTimeout(function () { run(true); }, 30000);
+		}
+
+		var chunks = [],
+				firstChunk = true;
 		res.on('data', function(chunk) {
+			// if method start timer for next call now
+			if (method == 2 && intervalGlobal == true && firstChunk == true) {
+				setTimeout(function () { run(true); }, 30000);
+				firstChunk = false;
+			}
+
 			chunks.push(chunk);
 		});
 
@@ -167,10 +174,10 @@ function csvBundler (vehicles) {
 }
 
 
-function run (alt) {
-	requestWithEncoding(url, function(err, data) {
-		// if alt method start timer for next call now
-		if (alt == true && intervalGlobal == true) {
+function run (method) {
+	requestWithEncoding(url, method, function(err, data) {
+		// if method start timer for next call now
+		if (method == 3 && intervalGlobal == true) {
 			setTimeout(function () { run(true); }, 30000);
 		}
 
@@ -193,32 +200,52 @@ function run (alt) {
 			csvBundler(vehicles);
 		}
 	})
+};
+
+function kill () {
+	if (intervalGlobal == true)
+		intervalGlobal = false;
+	else
+		clearInterval(intervalGlobal);
+	console.log('Stopping calls, wrapping up.');
+};
+
+function startServer () {
+	var server = app.listen(3000, function () {
+		var host = server.address().address;
+		var port = server.address().port;
+		console.log('Bus app listening at http://%s:%s', host, port);
+	});
+};
+
+
+var mtakey = process.argv[4] !== undefined ? process.argv[4] : credentials.mtakey,
+		url = 'http://api.prod.obanyc.com/api/siri/vehicle-monitoring.json?key=' + mtakey;
+
+if (mtakey == undefined) {
+	console.log('Failed: Supply an MTA Bustime API key in order to run.');
+} else {
+	var method = Number(process.argv[2]),
+			researchLength = process.argv[3] !== undefined ? Number(process.argv[3]) : 600000,
+			intervalGlobal = null;
+
+	if (isNaN(method) || method < 0 || method > 3) {
+		console.log('Method option invalid.')
+	} else {
+		startServer();
+		console.log('Starting operation...')
+	}
+
+	if (method == 0) {
+		// METHOD 0: run this every 30 seconds
+		intervalGlobal = setInterval(function () { run(method); }, 30000);
+		setTimeout(function () { kill(); }, researchLength);
+	} else if (method == 1 || method == 2 || method == 3) {
+		// METHOD 1: run 30 seconds after first response from Bustime API
+		// METHOD 2: run 30 seconds after first portion of streamed data from Bustime API
+		// METHOD 3: run this 30 seconds after callback
+		run(method);
+		intervalGlobal = true;
+		setTimeout(function () { kill(); }, researchLength);
+	}
 }
-
-
-var intervalGlobal = null;
-
-// METHOD 1: run this every 30 seconds
-console.log('Starting operation.')
-intervalGlobal = setInterval(function () { run(false); }, 30000);
-setTimeout(function () {
-	clearInterval(intervalGlobal);
-	console.log('Finished operation.');
-}, 600000);
-
-// METHOD 2: run this every 30 seconds AFTER 1st success
-console.log('Starting operation.');
-run(true);
-intervalGlobal = true;
-setTimeout(function () {
-	intervalGlobal = false;
-	console.log('Finished operation.');
-}, 600000);
-
-
-var server = app.listen(3000, function () {
-	var host = server.address().address;
-	var port = server.address().port;
-
-	console.log('Bus app listening at http://%s:%s', host, port);
-});
