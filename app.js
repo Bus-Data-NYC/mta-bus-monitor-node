@@ -80,7 +80,7 @@ function requestWithEncoding (url, method, callback) {
 function processVehs (data) {
 	data = JSON.parse(data);
 	var curTime = Date.now();
-	if (data.Siri !== undefined && data.Siri.ServiceDelivery !== undefined) {
+	if (data !== undefined && data.Siri !== undefined && data.Siri.ServiceDelivery !== undefined) {
 		var del = data.Siri.ServiceDelivery,
 				vehs = del.VehicleMonitoringDelivery[0],
 				warn = del.SituationExchangeDelivery[0];
