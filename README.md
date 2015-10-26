@@ -18,3 +18,8 @@ var3: `mtakey` (default is one in your credentials.js, if none in cl or in crede
 2: run 30 seconds after first portion of streamed data from Bustime API
 3: run this 30 seconds in callback (totally complete response)
 
+#### Calc unique rows
+Run `node calcUniques.js`. It will return a numerical value indicating the number of unique rows.
+
+
+
