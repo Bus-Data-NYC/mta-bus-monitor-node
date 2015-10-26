@@ -9,14 +9,21 @@ Make sure to `npm install` if you haven't already. To run: `node app.js` + ` ` +
 
 #### Customizable components
 var1: Method number val (0,1,2, or 3)
+
 var2: Time of experiment in millseconds (default is 600000 if none specified)
+
 var3: `mtakey` (default is one in your credentials.js, if none in cl or in credentials.js, wont run)
+
 
 #### Methods
 0: Run in the callback after everything has been returned and data compilation/gzip completed
+
 1: run 30 seconds after first response from Bustime API
+
 2: run 30 seconds after first portion of streamed data from Bustime API
+
 3: run this 30 seconds in callback (totally complete response)
+
 
 #### Calc unique rows
 Run `node calcUniques.js`. It will return a numerical value indicating the number of unique rows.
