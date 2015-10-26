@@ -10,7 +10,7 @@ Make sure to `npm install` if you haven't already. To run: `node app.js` + ` ` +
 #### Customizable components
 var1: Method number val (0,1,2, or 3)
 
-var2: Time of experiment in millseconds (default is 600000 if none specified)
+var2: Time of experiment in millseconds (default is 600000 if none specified). If set to 0, then will run in perpetuity.
 
 var3: `mtakey` (default is one in your credentials.js, if none in cl or in credentials.js, wont run)
 

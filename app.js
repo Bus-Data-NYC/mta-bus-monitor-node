@@ -223,6 +223,7 @@ var mtakey = process.argv[4] !== undefined ? process.argv[4] : credentials.mtake
 		url = 'http://api.prod.obanyc.com/api/siri/vehicle-monitoring.json?key=' + mtakey;
 
 if (mtakey == undefined) {
+	if (mtakey == 'production')
 	console.log('Failed: Supply an MTA Bustime API key in order to run.');
 } else {
 	var method = Number(process.argv[2]),
@@ -239,13 +240,15 @@ if (mtakey == undefined) {
 	if (method == 0) {
 		// METHOD 0: run this every 30 seconds
 		intervalGlobal = setInterval(function () { run(method); }, 30000);
-		setTimeout(function () { kill(); }, researchLength);
+		if (researchLength > 0)
+			setTimeout(function () { kill(); }, researchLength);
 	} else if (method == 1 || method == 2 || method == 3) {
 		// METHOD 1: run 30 seconds after first response from Bustime API
 		// METHOD 2: run 30 seconds after first portion of streamed data from Bustime API
-		// METHOD 3: run this 30 seconds after callback
+		// METHOD 3: run this 30 seconds in callback
 		run(method);
 		intervalGlobal = true;
-		setTimeout(function () { kill(); }, researchLength);
+		if (researchLength > 0)
+			setTimeout(function () { kill(); }, researchLength);
 	}
 }

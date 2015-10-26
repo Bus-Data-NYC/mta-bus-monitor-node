@@ -42,6 +42,7 @@ var dive = function (dir) {
 function loadUp (err, file, last) {
 	if (err) {
 		console.log('Failed to read file');
+		ctr.state += 1;
 	} else if (file.indexOf('.DS_Store') < 0) {
 		fs.readFile(file, 'utf-8', function (err, data) {
 			ctr.state += 1;
@@ -74,31 +75,49 @@ function loadUp (err, file, last) {
 function doneLoading () {
 	// ctr is a control against running doneLoading without finishing file reads
 	if (ctr.goal !== ctr.state) {
-		console.log('Waiting to finish loading files...')
-		setTimeout(doneLoading(), 2000);
+		if (ctr.repeat < 100) {
+			ctr.repeat += 1;
+			console.log('Still waiting to finish loading files...');
+			setTimeout(doneLoading(), 2000);
+		} else {
+			console.log('Count failed; too many errors.')
+		}
 	} else {
-		var mega = {}
-		var flattened = []
+		var ct = 0;
 
-		allFiles.forEach(function (rows) {
-			rows.forEach(function (row) {
-				flattened.push(row);
+		allFiles.forEach(function (rows, i1) {
+
+			var flattened = [];
+			rows.forEach(function (row, i2) {
+				var key = row[0] + row[7];
+				flattened.push(key);
 			});
-		});		
+			var uniqueArray = flattened.filter(function(item, pos) {
+			  return flattened.indexOf(item) == pos;
+			});
+			console.log('Finished route ' + i1 + ' of ' + (allFiles.length - 1) + ' (Length ' + uniqueArray.length + ')');
+			ct += uniqueArray.length;
 
-		flattened.forEach(function (file) {
-			var key = file[0] + file[7];
-			mega[key] = file;
 		});
 
-		console.log(Object.keys(mega).length);
+		console.log('Calculations done: ' + ct + ' unique rows.');
 	}
 }
 
 
 var ctr = {
-	state: 0,
-	goal: 0
-};
-var allFiles = [];
-dive('store')
+		state: 0,
+		goal: 0,
+		repeat: 0
+	},
+	allFiles = [],
+	folder = process.argv[2] == undefined ?  'store' : process.argv[2];
+
+dive(folder);
+
+
+
+
+
+
+
