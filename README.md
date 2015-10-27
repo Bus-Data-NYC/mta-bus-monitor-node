@@ -10,9 +10,9 @@ Make sure to `npm install` if you haven't already. To run: `node app.js` + ` ` +
 #### Customizable components
 var1: Method number val (0,1,2, or 3)
 
-var2: Time of experiment in millseconds (default is 600000 if none specified). If set to 0, then will run in perpetuity.
+var2: Time of experiment in millseconds (default is 600000 if none specified). If set to 0 or the string "production," then will run in perpetuity. You can also specify use of 600000 as the timeout period by entering the string "default" as your value, too.
 
-var3: `mtakey` (default is one in your credentials.js, if none in cl or in credentials.js, wont run)
+var3: `mtakey` specfication. Default is one in your `credentials.js`. If none is specified in command line or in `credentials.js`, the program won't run. You can also specify use of `credentials.js` variable by entering the string "default" as your value, too.
 
 
 #### Methods

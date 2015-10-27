@@ -1,53 +1,95 @@
 var express = require('express');
 var app = express();
 
+// settings
 app.set('view engine', 'ejs');
 app.use('/static',  express.static(__dirname + '/static'));
 app.use('/bower_components',  express.static(__dirname + '/bower_components'));
 
+// calls
 var http = require('http');
 var request = require('request');
 
+// packaging
 var zlib = require('zlib');
-var fs = require('fs');
-var mkdirp = require('mkdirp').mkdirp;
-
-var credentials = require('./credentials.js');
-
 var bodyParser = require('body-parser');
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({extended: true}));
 
+// file handling
+var fs = require('fs');
+var mkdirp = require('mkdirp').mkdirp;
 
+// private information
+var credentials = require('./credentials.js');
+
+// other tools
+var nodemailer = require('nodemailer');
+var emailError;
+if (credentials.nodemailer == undefined) {
+	console.log('Warning: Missing email login information.');
+} else {
+	var transporter = nodemailer.createTransport({
+	  service: credentials.nodemailer.service,
+	  auth: {
+	    user: credentials.nodemailer.auth.user,
+	    pass: credentials.nodemailer.auth.pass
+	  }
+	});
+	var mailOptions = {
+    from: credentials.nodemailer.options.from,
+    to: credentials.nodemailer.options.to,
+    subject: 'Bus Monitor Runtime Error',
+    text: 'Hello world ✔',
+    html: ''
+	};
+	emailError = function (errText) {
+		mailOptions.html = '<b>Runtime Error: </b><br> Something happened: ' + errText;
+		transporter.sendMail(mailOptions, function(error, info){
+		  if (error)
+		    return console.log(error);
+		  else
+		  	console.log('Message sent: ' + info.response);
+		});
+	};
+}
+
+// operations
+var ops = require('./ops.js'),
+		processVehs = ops.processVehs,
+		csvBundler = ops.csvBundler,
+		bundler = ops.bundler;
+
+function startServer () {
+	var server = app.listen(3000, function () {
+		var host = server.address().address;
+		var port = server.address().port;
+		console.log('Bus app listening at http://%s:%s', host, port);
+	});
+};
 
 function requestWithEncoding (url, method, callback) {
 	var headers = {
-		"accept-charset" : "ISO-8859-1,utf-8;q=0.7,*;q=0.3",
-		"accept-language" : "en-US,en;q=0.8",
-		"accept" : "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-		"user-agent" : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_6_8) AppleWebKit/537.13+ (KHTML, like Gecko) Version/5.1.7 Safari/534.57.2",
-		"accept-encoding" : "gzip,deflate",
+		"accept-charset" : "ISO-8859-1,utf-8;q=0.7,*;q=0.3", 
+		"accept-language" : "en-US,en;q=0.8", 
+		"accept" : "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", 
+		"user-agent" : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_6_8) AppleWebKit/537.13+ (KHTML, like Gecko) Version/5.1.7 Safari/534.57.2", 
+		"accept-encoding" : "gzip,deflate"
 	};
-
-	var options = {
-		url: url,
-		headers: headers
-	};
-
+	var options = {url: url, headers: headers};
 	var req = request.get(options);
 
 	req.on('response', function(res) {
 		// if method start timer for next call now
-		if (method == 1 && intervalGlobal == true) {
-			setTimeout(function () { run(true); }, 30000);
-		}
+		if (method == 1 && intervalGlobal == true)
+			setTimeout(function () { runCall(1); }, 30000);
 
 		var chunks = [],
 				firstChunk = true;
 		res.on('data', function(chunk) {
 			// if method start timer for next call now
 			if (method == 2 && intervalGlobal == true && firstChunk == true) {
-				setTimeout(function () { run(true); }, 30000);
+				setTimeout(function () { runCall(2); }, 30000);
 				firstChunk = false;
 			}
 
@@ -66,6 +108,9 @@ function requestWithEncoding (url, method, callback) {
 					callback(err, decoded && decoded.toString());
 				})
 			} else {
+				if (method == 3 && intervalGlobal == true)
+					setTimeout(function () { runCall(true); }, 30000);
+
 				callback(null, buffer.toString());
 			}
 		});
@@ -74,113 +119,10 @@ function requestWithEncoding (url, method, callback) {
 	req.on('error', function(err) {
 		callback(err);
 	});
-}
-
-
-function processVehs (data) {
-	data = JSON.parse(data);
-	var curTime = Date.now();
-	if (data !== undefined && data.Siri !== undefined && data.Siri.ServiceDelivery !== undefined) {
-		var del = data.Siri.ServiceDelivery,
-				vehs = del.VehicleMonitoringDelivery[0],
-				warn = del.SituationExchangeDelivery[0];
-
-		// handle all vehicle results
-		var vehicles = [];
-		var active = vehs.VehicleActivity
-		if (active !== undefined || active.length > 0) {
-			active.forEach(function (veh, i) {
-				var mvj = veh.MonitoredVehicleJourney;
-				var newData = {
-					timestamp: null,
-					vehicle_id: mvj.VehicleRef.split("_")[1],
-					latitude: String(parseFloat(mvj.VehicleLocation.Latitude.toFixed(6))),
-					longitude: String(parseFloat(mvj.VehicleLocation.Longitude.toFixed(6))),
-					bearing: String(parseFloat(mvj.Bearing.toFixed(2))),
-					progress: null,
-					service_date: mvj.FramedVehicleJourneyRef.DataFrameRef.split("-").join(""),
-					trip_id: mvj.FramedVehicleJourneyRef.DatedVehicleJourneyRef.slice(mvj.FramedVehicleJourneyRef.DatedVehicleJourneyRef.indexOf("_")+1),
-					block_assigned: null,
-					next_stop_id: null,
-					dist_along_route: null,
-					dist_from_stop: null
-				};
-
-				// convert timestamp to utc
-				var ts = new Date(veh.RecordedAtTime);
-				var t_utc = new Date(ts.getUTCFullYear(), ts.getUTCMonth(), ts.getUTCDate(),  ts.getUTCHours(), ts.getUTCMinutes(), ts.getUTCSeconds());
-				newData.timestamp = t_utc.toISOString().split(".")[0] + "Z";
-
-				if (mvj.ProgressRate == 'normalProgress') {
-					newData.progress = String(0); // normal prog
-				} else if (mvj.ProgressRate !== undefined) {
-					newData.progress = String(2); // layover
-				} else {
-					newData.progress = String(1); // no progress
-				}
-
-				if (mvj.BlockRef == undefined) {
-					newData.block_assigned = String(1);
-				} else {
-					newData.block_assigned = String(0);
-				}
-
-				if (mvj.MonitoredCall == undefined) {
-					newData.next_stop_id = '\N';
-					newData.dist_along_route = '\N';
-					newData.dist_from_stop = '\N';
-				} else {
-					newData.next_stop_id = mvj.MonitoredCall.StopPointRef.slice(4);
-					newData.dist_along_route = String(mvj.MonitoredCall.Extensions.Distances.CallDistanceAlongRoute.toFixed(2));
-					newData.dist_from_stop = String(mvj.MonitoredCall.Extensions.Distances.DistanceFromCall.toFixed(2));
-					// reduce zeroes for the hell of it
-					if (newData.dist_along_route == '0.0') { newData.dist_along_route = '0'; }
-					if (newData.dist_from_stop == '0.0') { newData.dist_along_route = '0'; }
-				}
-
-				vehicles.push(newData)
-			});
-			
-			return vehicles;
-		}
-	} else {
-		curTime = new Date(curTime).toString()
-		console.log('Errored/empty results processor at time ' + curTim);
-	}
 };
 
-
-function csvBundler (vehicles) {
-	var cols = ['timestamp', 'vehicle_id', 'latitude', 'longitude', 'bearing', 'progress', 'service_date', 'trip_id', 'block_assigned', 'next_stop_id', 'dist_along_route', 'dist_from_stop'];
-	vehicles = cols + '\r\n' + vehicles.join('\r\n') + '\r\n';
-
-	var t = new Date(Date.now()).toISOString().split('T');
-
-	var rte_path = 'store/' + t[0];
-	mkdirp(rte_path, function (err) {
-		if (err) { 
-			console.error('Failed to make file path. Error: ' + err);
-		} else {
-			rte_path += '/' + t[1].split('.')[0].split(':').join('') + '.csv';
-			fs.writeFile(rte_path, vehicles, function (err) {
-				if (err) {
-					console.error('Failed to write file at day ' + t[0] + ' at time ' + t[1] + '. Error: ' + err);
-				} else {
-					console.log('Write success for day ' + t[0] + ' at time ' + t[1] + '.')
-				}
-			});
-		}
-	});
-}
-
-
-function run (method) {
+function runCall (method) {
 	requestWithEncoding(url, method, function(err, data) {
-		// if method start timer for next call now
-		if (method == 3 && intervalGlobal == true) {
-			setTimeout(function () { run(true); }, 30000);
-		}
-
 		if (err) {
 			var t = new Date(Date.now()).toISOString().split('T');
 			console.log('Error on request at day ' + t[0] + ' at time ' + t[1] + '. Error: ', err);
@@ -210,24 +152,17 @@ function kill () {
 	console.log('Stopping calls, wrapping up.');
 };
 
-function startServer () {
-	var server = app.listen(3000, function () {
-		var host = server.address().address;
-		var port = server.address().port;
-		console.log('Bus app listening at http://%s:%s', host, port);
-	});
-};
 
-
-var mtakey = process.argv[4] !== undefined ? process.argv[4] : credentials.mtakey,
+// operation to determine how to run repeated api calls
+var mtakey = (process.argv[4] !== undefined) && (process.argv[4] !== 'default') ? process.argv[4] : credentials.mtakey,
 		url = 'http://api.prod.obanyc.com/api/siri/vehicle-monitoring.json?key=' + mtakey;
 
 if (mtakey == undefined) {
 	if (mtakey == 'production')
 	console.log('Failed: Supply an MTA Bustime API key in order to run.');
 } else {
-	var method = Number(process.argv[2]),
-			researchLength = process.argv[3] !== undefined ? Number(process.argv[3]) : 600000,
+	var method = ((process.argv[2] == 'default') || (process.argv[2] == 'production')) ? 1 : Number(process.argv[2]),
+			researchLength = (process.argv[3] !== undefined) && (isNaN(Number(process.argv[3])) == false) ? Number(process.argv[3]) : ((process.argv[3] == 'production') ? 0 : 600000),
 			intervalGlobal = null;
 
 	if (isNaN(method) || method < 0 || method > 3) {
@@ -237,18 +172,24 @@ if (mtakey == undefined) {
 		console.log('Starting operation...')
 	}
 
+	// Method 0: run this every 30 seconds
+	// Method 1: run 30 seconds after first response from Bustime API
+	// Method 2: run 30 seconds after first portion of streamed data from Bustime API
+	// Method 3: run this 30 seconds in callback
 	if (method == 0) {
-		// METHOD 0: run this every 30 seconds
-		intervalGlobal = setInterval(function () { run(method); }, 30000);
+		intervalGlobal = setInterval(function () { runCall(method); }, 30000);
 		if (researchLength > 0)
 			setTimeout(function () { kill(); }, researchLength);
 	} else if (method == 1 || method == 2 || method == 3) {
-		// METHOD 1: run 30 seconds after first response from Bustime API
-		// METHOD 2: run 30 seconds after first portion of streamed data from Bustime API
-		// METHOD 3: run this 30 seconds in callback
-		run(method);
+		runCall(method);
 		intervalGlobal = true;
 		if (researchLength > 0)
 			setTimeout(function () { kill(); }, researchLength);
 	}
-}
+};
+
+
+
+
+
+
