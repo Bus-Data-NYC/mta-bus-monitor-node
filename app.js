@@ -109,8 +109,7 @@ function requestWithEncoding (url, method, callback) {
 				})
 			} else {
 				if (method == 3 && intervalGlobal == true)
-					setTimeout(function () { runCall(true); }, 30000);
-
+					setTimeout(function () { runCall(3); }, 30000);
 				callback(null, buffer.toString());
 			}
 		});
