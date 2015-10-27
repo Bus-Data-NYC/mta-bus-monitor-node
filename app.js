@@ -82,21 +82,23 @@ function requestWithEncoding (url, method, callback) {
 	req.on('response', function(res) {
 		// if method start timer for next call now
 		if (method == 1 && intervalGlobal == true)
-			setTimeout(function () { runCall(1); }, 30000);
+			setTimeout(function () { runCall(method); }, 30000);
 
 		var chunks = [],
 				firstChunk = true;
 		res.on('data', function(chunk) {
 			// if method start timer for next call now
 			if (method == 2 && intervalGlobal == true && firstChunk == true) {
-				setTimeout(function () { runCall(2); }, 30000);
 				firstChunk = false;
+				setTimeout(function () { runCall(method); }, 30000);
 			}
 
 			chunks.push(chunk);
 		});
 
 		res.on('end', function() {
+			if (method == 3 && intervalGlobal == true)
+				setTimeout(function () { runCall(method); }, 30000);
 			var buffer = Buffer.concat(chunks);
 			var encoding = res.headers['content-encoding'];
 			if (encoding == 'gzip') {
@@ -108,8 +110,6 @@ function requestWithEncoding (url, method, callback) {
 					callback(err, decoded && decoded.toString());
 				})
 			} else {
-				if (method == 3 && intervalGlobal == true)
-					setTimeout(function () { runCall(3); }, 30000);
 				callback(null, buffer.toString());
 			}
 		});
@@ -180,8 +180,8 @@ if (mtakey == undefined) {
 		if (researchLength > 0)
 			setTimeout(function () { kill(); }, researchLength);
 	} else if (method == 1 || method == 2 || method == 3) {
-		runCall(method);
 		intervalGlobal = true;
+		runCall(method);
 		if (researchLength > 0)
 			setTimeout(function () { kill(); }, researchLength);
 	}
