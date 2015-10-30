@@ -4,8 +4,7 @@ var mkdirp = require('mkdirp').mkdirp;
 var credentials = require('./credentials.js');
 
 var azure = require('azure-storage');
-var AZURE_STORAGE_ACCOUNT = credentials.azure.account,
-		AZURE_STORAGE_ACCESS_KEY = credentials.azure.key;
+var AZURECREDS = credentials.azure;
 
 module.exports = {
 	processVehs: function (data) {
@@ -85,13 +84,13 @@ module.exports = {
 		vehicles = cols + '\r\n' + vehicles.join('\r\n') + '\r\n';
 		var t = new Date(Date.now()).toISOString().split('T');
 
-		var bSvc = azure.createBlobService(AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_ACCESS_KEY);
+		var bSvc = azure.createBlobService(AZURECREDS.temp.account, AZURECREDS.temp.key);
 		bSvc.createContainerIfNotExists(t[0], {publicAccessLevel : 'container'}, function (error, result, response){
 			if (error) {
 				console.log('Error creating Azure storage container: ', error);
 			} else {
 				var fn = t[1].split('.')[0].split(':').join('') + '.csv';
-				bSvc.createBlockBlobFromText(t[0], fn, vehicles, function (error, result, response){
+				bSvc.createBlockBlobFromText(t[0], fn, vehicles, function (err, result, response){
 					if (error) {
 						cb(true, 'Failed to write file at day ' + t[0] + ' at time ' + t[1] + '. Error: ' + err)
 					} else {
@@ -102,28 +101,26 @@ module.exports = {
 		});
 	},
 
-	bundler: function () {
-		var t = new Date(Date.now()).toISOString().split('T'),
-				currHr = t[1].split('.')[0].split(':')[0],
-				dir = 'store/' + t[0];
-		fs.readdir(dir, function (err, files) {
-			if (err) {
-				console.log('Error calculating data for day ' + t[0] + ', hour ' + currHr);
-			} else {
-				files = files.filter(function (ea) { return String(Number(currHr) - 1) == String(ea[0] + ea[1]); });
-				dive(dir, files);
-			}
+	bundler: function (t, targHr) {
+		var dir = t[0];
+		bSvc.listBlobsSegmented(dir, null, function(err, result) {
+		  if (err) {
+		    console.log('Error compiling files data for day ' + t[0] + ', hour ' + targHr);
+		  } else {
+		    result.entries = result.entries.map(function (e) { return e.name; }).filter(function (e) { return String(targHr) == String(e[0] + e[1]); });
+		    dive(bSvc, dir, result.entries);
+		  }
 		});
 
 		var allFiles = [];
 		var ctr = { state: 0, goal: 0, repeat: 0 };
-		function dive (dir, files) {
+		function dive (bSvc, dir, files) {
 	    files.forEach(function (file, i) {
-	      var path = dir + "/" + file;
-				fs.readFile(path, 'utf-8', function (err, data) {
+
+				bSvc.getBlobToText(dir, file, function(err, data, meta) {
 					ctr.goal += 1;
 				  if (err) {
-				    console.log('Error reading this file: ' + path + ': ', err);
+				    console.log('Error reading file: ' + file + ' in dir: ' + dir + '. Error: ', err);
 				  } else {
 				  	var rows = [];
 
@@ -139,56 +136,50 @@ module.exports = {
 				  	ctr.state += 1;
 				  	allFiles.push(rows);
 
-				  	if (files.length - 1 == i)
-				  		parseRead(currHr);
+				  	if (files.length - 1 == i) {
+				  		parseRead(targHr, function (allrows) {
+				  			archive(allrows); 
+				  		});
+				  	}
 				  }
 				});
+
 	    });
 		};
 
-		function parseRead (currHr) {
+		function parseRead (targHr, cb) {
 			// ctr is a control against running parseRead without finishing file reads
 			if (ctr.goal !== ctr.state) {
 				if (ctr.repeat < 25) {
 					ctr.repeat += 1;
 					console.log('Still waiting to finish loading files...');
-					setTimeout(function () { parseRead(currHr) }, 20000);
+					setTimeout(function () { parseRead(targHr) }, 20000);
 				} else {
 					console.log('Count failed; too many errors.')
 				}
 			} else {
-				var flattened = {};
+				var uniques = {},
+						ur =[];
 				allFiles.forEach(function (rows, i1) {
 					rows.forEach(function (row, i2) {
 						try {
-							var hr = row[0].split("T")[1].split(":")[0];
-							if (hr == currHr && row[0] !== undefined && row[7] !== undefined) {
+							var sameHr = row[0].split("T")[1].split(":")[0] == targHr;
+							if (sameHr && row[0] !== undefined && row[7] !== undefined) {
 								var key = row[0] + row[7];
-								if (flattened[key] == undefined) {
-									flattened[key] = {
-										timestamp: row[0] || null,
-										vehicle_id: row[1] || null,
-										latitude: row[2] || null,
-										longitude: row[3] || null,
-										bearing: row[4] || null,
-										progress: row[5] || null,
-										service_date: row[6] || null,
-										trip_id: row[7] || null,
-										block_assigned: row[8] || null,
-										next_stop_id: row[9] || null,
-										dist_along_route: row[10] || null,
-										dist_from_stop: row[11] || null
-									};
-								}
+								if (uniques[key] == undefined) ur.push(row);
 							}
 						} catch (e) {
 							console.log('Error when parsing trip_id: ' + row[7]);
 						}
 					});
 				});
-				console.log('Finished processing ' + (allFiles.length - 1) + ' files for hour ' + currHr + '.');
-				// upload resulting files
+				console.log('Finished processing ' + (allFiles.length - 1) + ' files for hour ' + targHr + '.');
+				cb(ur);
 			}
+		};
+
+		function archive (ar) {
+			var bSvc = azure.createBlobService(AZURECREDS.archive.account, AZURECREDS.archive.key);
 		};
 
 

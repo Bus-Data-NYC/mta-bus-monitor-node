@@ -57,9 +57,8 @@ if (credentials.nodemailer == undefined) {
 // operations
 var ops = require('./ops.js'),
 		processVehs = ops.processVehs,
-		csvBundler = ops.csvBundler,
-		bundler = ops.bundler;
-// bundler();
+		csvBundler = ops.csvBundler;
+
 function startServer () {
 	var server = app.listen(3000, function () {
 		var host = server.address().address;
@@ -190,6 +189,24 @@ if (mtakey == undefined) {
 			setTimeout(function () { kill(); }, researchLength);
 	}
 };
+
+// manage bundler operations every 30 min (1800000 ms) do a check
+var lastBundleRun = null;
+var bundler = setTimeout(function () { 
+	var t = new Date(Date.now()).toISOString().split('T')
+	var targHr = Number(t[1].split('.')[0].split(':')[0]) - 1;
+	if (lastBundleRun !== t) ops.bundler(t, targHr);
+	bundler;
+}, 1800000);
+
+
+
+
+
+
+
+
+
 
 
 
