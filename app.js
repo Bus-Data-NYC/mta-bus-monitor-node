@@ -25,7 +25,7 @@ var credentials = require('./credentials.js');
 
 // other tools
 var nodemailer = require('nodemailer');
-var emailError;
+var emailError = function () { console.log('Error occured but not email information included so email alert not sent.'); };
 if (credentials.nodemailer == undefined) {
 	console.log('Warning: Missing email login information.');
 } else {
@@ -128,21 +128,22 @@ function runCall (method) {
 		} else {
 			var vehicles = processVehs(data);
 
-			// convert each obj in array to a list/array
-			vehicles = vehicles.map(function (veh) {
-				var keys = Object.keys(veh);
-				var res = []
-				keys.forEach(function (key) {
-					res.push(veh[key]);
+			if (vehicles.length > 0) {
+				// convert each obj in array to a list/array
+				vehicles = vehicles.map(function (veh) {
+					var keys = Object.keys(veh);
+					var res = []
+					keys.forEach(function (key) {
+						res.push(veh[key]);
+					});
+					return res;
+				}); 
+				
+				csvBundler(vehicles, function (err, msg) {
+					if (err) emailError(msg);
+					console.log(msg);
 				});
-				return res;
-			}); 
-			
-			csvBundler(vehicles, function (err, msg) {
-				if (err)
-					emailError(msg);
-				console.log(msg);
-			});
+			}
 		}
 	})
 };

@@ -10,7 +10,6 @@ var AZURE_STORAGE_ACCOUNT = credentials.azure.account,
 module.exports = {
 	processVehs: function (data) {
 		data = JSON.parse(data);
-		var curTime = Date.now();
 		if (data !== undefined && data.Siri !== undefined && data.Siri.ServiceDelivery !== undefined) {
 			var del = data.Siri.ServiceDelivery,
 					vehs = del.VehicleMonitoringDelivery[0],
@@ -75,8 +74,9 @@ module.exports = {
 				return vehicles;
 			}
 		} else {
-			curTime = new Date(curTime).toString()
+			var csvBundlercurTime = new Date(Date.now()).toString()
 			console.log('Errored/empty results processor at time ' + curTim);
+			return [];
 		}
 	},
 
