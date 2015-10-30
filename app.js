@@ -43,7 +43,7 @@ if (credentials.nodemailer == undefined) {
     text: 'Hello world ✔',
     html: ''
 	};
-	emailError = function (errText) {
+	var emailError = function (errText) {
 		mailOptions.html = '<b>Runtime Error: </b><br> Something happened: ' + errText;
 		transporter.sendMail(mailOptions, function(error, info){
 		  if (error)
@@ -52,14 +52,14 @@ if (credentials.nodemailer == undefined) {
 		  	console.log('Message sent: ' + info.response);
 		});
 	};
-}
+};
 
 // operations
 var ops = require('./ops.js'),
 		processVehs = ops.processVehs,
 		csvBundler = ops.csvBundler,
 		bundler = ops.bundler;
-
+// bundler();
 function startServer () {
 	var server = app.listen(3000, function () {
 		var host = server.address().address;
@@ -138,7 +138,11 @@ function runCall (method) {
 				return res;
 			}); 
 			
-			csvBundler(vehicles);
+			csvBundler(vehicles, function (err, msg) {
+				if (err)
+					emailError(msg);
+				console.log(msg);
+			});
 		}
 	})
 };
@@ -165,10 +169,9 @@ if (mtakey == undefined) {
 			intervalGlobal = null;
 
 	if (isNaN(method) || method < 0 || method > 3) {
-		console.log('Method option invalid.')
+		console.log('Method option invalid.');
 	} else {
 		startServer();
-		console.log('Starting operation...')
 	}
 
 	// Method 0: run this every 30 seconds

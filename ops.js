@@ -1,6 +1,12 @@
 var fs = require('fs');
 var mkdirp = require('mkdirp').mkdirp;
 
+var credentials = require('./credentials.js');
+
+var azure = require('azure-storage');
+var AZURE_STORAGE_ACCOUNT = credentials.azure.account,
+		AZURE_STORAGE_ACCESS_KEY = credentials.azure.key;
+
 module.exports = {
 	processVehs: function (data) {
 		data = JSON.parse(data);
@@ -74,23 +80,22 @@ module.exports = {
 		}
 	},
 
-	csvBundler: function (vehicles) {
+	csvBundler: function (vehicles, cb) {
 		var cols = ['timestamp', 'vehicle_id', 'latitude', 'longitude', 'bearing', 'progress', 'service_date', 'trip_id', 'block_assigned', 'next_stop_id', 'dist_along_route', 'dist_from_stop'];
 		vehicles = cols + '\r\n' + vehicles.join('\r\n') + '\r\n';
-
 		var t = new Date(Date.now()).toISOString().split('T');
-		var rte_path = 'store/' + t[0];
 
-		mkdirp(rte_path, function (err) {
-			if (err) { 
-				console.error('Failed to make file path. Error: ' + err);
+		var bSvc = azure.createBlobService(AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_ACCESS_KEY);
+		bSvc.createContainerIfNotExists(t[0], {publicAccessLevel : 'container'}, function (error, result, response){
+			if (error) {
+				console.log('Error creating Azure storage container: ', error);
 			} else {
-				rte_path += '/' + t[1].split('.')[0].split(':').join('') + '.csv';
-				fs.writeFile(rte_path, vehicles, function (err) {
-					if (err) {
-						console.error('Failed to write file at day ' + t[0] + ' at time ' + t[1] + '. Error: ' + err);
+				var fn = t[1].split('.')[0].split(':').join('') + '.csv';
+				bSvc.createBlockBlobFromText(t[0], fn, vehicles, function (error, result, response){
+					if (error) {
+						cb(true, 'Failed to write file at day ' + t[0] + ' at time ' + t[1] + '. Error: ' + err)
 					} else {
-						console.log('Write success for day ' + t[0] + ' at time ' + t[1] + '.')
+						cb(false, 'Write success for day ' + t[0] + ' at time ' + t[1] + '.');
 					}
 				});
 			}
@@ -102,25 +107,24 @@ module.exports = {
 				currHr = t[1].split('.')[0].split(':')[0],
 				dir = 'store/' + t[0];
 		fs.readdir(dir, function (err, files) {
-			files = files.filter(function (ea) { return String(Number(currHr) - 1) == String(ea[0] + ea[1]); });
-			dive(dir, files);
+			if (err) {
+				console.log('Error calculating data for day ' + t[0] + ', hour ' + currHr);
+			} else {
+				files = files.filter(function (ea) { return String(Number(currHr) - 1) == String(ea[0] + ea[1]); });
+				dive(dir, files);
+			}
 		});
-
-
-
-
-
 
 		var allFiles = [];
 		var ctr = { state: 0, goal: 0, repeat: 0 };
 		function dive (dir, files) {
 	    files.forEach(function (file, i) {
 	      var path = dir + "/" + file;
-				fs.readFile(file, 'utf-8', function (err, data) {
+				fs.readFile(path, 'utf-8', function (err, data) {
+					ctr.goal += 1;
 				  if (err) {
 				    console.log('Error reading this file: ' + path + ': ', err);
 				  } else {
-				  	ctr.goal += 1;
 				  	var rows = [];
 
 				  	data = data.split('\r\n');
@@ -136,57 +140,56 @@ module.exports = {
 				  	allFiles.push(rows);
 
 				  	if (files.length - 1 == i)
-				  		parseRead();
+				  		parseRead(currHr);
 				  }
 				});
 	    });
 		};
 
-		function parseRead () {
+		function parseRead (currHr) {
 			// ctr is a control against running parseRead without finishing file reads
 			if (ctr.goal !== ctr.state) {
 				if (ctr.repeat < 25) {
 					ctr.repeat += 1;
 					console.log('Still waiting to finish loading files...');
-					setTimeout(function () { parseRead() }, 20000);
+					setTimeout(function () { parseRead(currHr) }, 20000);
 				} else {
 					console.log('Count failed; too many errors.')
 				}
 			} else {
-				var ct = 0;
-
+				var flattened = {};
 				allFiles.forEach(function (rows, i1) {
-
-					var flattened = [];
 					rows.forEach(function (row, i2) {
-						var key = row[0] + row[7];
-						flattened.push(key);
+						try {
+							var hr = row[0].split("T")[1].split(":")[0];
+							if (hr == currHr && row[0] !== undefined && row[7] !== undefined) {
+								var key = row[0] + row[7];
+								if (flattened[key] == undefined) {
+									flattened[key] = {
+										timestamp: row[0] || null,
+										vehicle_id: row[1] || null,
+										latitude: row[2] || null,
+										longitude: row[3] || null,
+										bearing: row[4] || null,
+										progress: row[5] || null,
+										service_date: row[6] || null,
+										trip_id: row[7] || null,
+										block_assigned: row[8] || null,
+										next_stop_id: row[9] || null,
+										dist_along_route: row[10] || null,
+										dist_from_stop: row[11] || null
+									};
+								}
+							}
+						} catch (e) {
+							console.log('Error when parsing trip_id: ' + row[7]);
+						}
 					});
-					var uniqueArray = flattened.filter(function(item, pos) {
-					  return flattened.indexOf(item) == pos;
-					});
-					console.log('Finished route ' + i1 + ' of ' + (allFiles.length - 1) + ' (Length ' + uniqueArray.length + ')');
-					ct += uniqueArray.length;
-
 				});
-
-				console.log('Calculations done: ' + ct + ' unique rows.');
+				console.log('Finished processing ' + (allFiles.length - 1) + ' files for hour ' + currHr + '.');
+				// upload resulting files
 			}
-		}
-
-
-		var ctr = {
-				state: 0,
-				goal: 0,
-				repeat: 0
-			},
-			allFiles = [],
-			folder = process.argv[2] == undefined ?  'store' : process.argv[2];
-
-		dive(folder);
-
-
-
+		};
 
 
 
