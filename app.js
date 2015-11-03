@@ -194,15 +194,21 @@ if (mtakey == undefined) {
 var lastBundleRun = null;
 var bundler = function () {
 	setTimeout(function () { 
-		var t = new Date(Date.now()).toISOString().split('T');
+		var latest = new Date(Date.now());
+		var t = latest.toISOString().split('T');
 		var targHr = Number(t[1].split('.')[0].split(':')[0]) - 1 + 1;
-		if (lastBundleRun !== t) {
+		if (lastBundleRun !== latest.getUTCHours()) {
 			ops.bundler(t, targHr, function (err, errMsg) {
-				if (err) { emailError(errMsg); }
+				if (err) { 
+					console.log('Fail')
+					lastBundleRun = null;
+					emailError(errMsg); 
+				}
 			});
 		}
+		lastBundleRun = latest.getUTCHours();
 		bundler();
-	}, 2000);
+	}, 1800000);
 };
 bundler();
 

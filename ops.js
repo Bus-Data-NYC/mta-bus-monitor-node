@@ -106,7 +106,7 @@ module.exports = {
 		var bSvc = azure.createBlobService(AZURECREDS.temp.account, AZURECREDS.temp.key);
 		bSvc.listBlobsSegmented(dir, null, function(err, result) {
 		  if (err) {
-		    console.log('Error compiling files data for day ' + t[0] + ', hour ' + targHr);
+		    cb(true, 'Error listing blob for ' + dir + ', hour ' + targHr + '. Error res: ' + result);
 		  } else {
 		    result.entries = result.entries.map(function (e) { return e.name; }).filter(function (e) { return String(targHr) == String(e[0] + e[1]); });
 		    dive(bSvc, dir, result.entries, function (err, res) { cb(err, res); });
@@ -117,39 +117,44 @@ module.exports = {
 		var ctr = { state: 0, goal: 0, repeat: 0 };
 
 		function dive (bSvc, dir, files, cb) {
+			var anyErrors = false;
 	    files.forEach(function (file, i) {
-				bSvc.getBlobToText(dir, file, function(err, data, meta) {
-					ctr.goal += 1;
-				  if (err) {
-				    console.log('Error reading file: ' + file + ' in dir: ' + dir + '. Error: ', err);
-				  } else {
-				  	var rows = [];
+	    	if (anyErrors == false) {
+					bSvc.getBlobToText(dir, file, function(err, data, meta) {
+						ctr.goal += 1;
+					  if (err) {
+					  	// if any errors occur while parsing any of the files, send an email and kill ops
+					  	anyErrors = true;
+					    cb(false, 'Error reading file: ' + file + ' in dir: ' + dir + '. Error: ', err);
+					  } else {
+					  	var rows = [];
 
-				  	data = data.split('\r\n');
-				  	data.shift(); // drop first row
+					  	data = data.split('\r\n');
+					  	data.shift(); // drop first row
 
-				  	data.forEach(function (row) {
-				  		var sp = row.split(',');
-				  		if (sp.length == 12) // only add if its a complete row
-				  			rows.push(sp);
-				  	});
+					  	data.forEach(function (row) {
+					  		var sp = row.split(',');
+					  		if (sp.length == 12) // only add if its a complete row
+					  			rows.push(sp);
+					  	});
 
-				  	ctr.state += 1;
-				  	allFiles.push(rows);
+					  	ctr.state += 1;
+					  	allFiles.push(rows);
 
-				  	if (files.length - 1 == i) {
-				  		parseRead(targHr, function (err, res) {
-				  			if (err) { cb(true, res); } 
-				  			else {
-					  			archive(dir, targHr, res, function (err, res) {
-						  			if (err) { cb(true, res); } 
-						  			else { cb(false, null); }
-					  			}); 
-				  			}
-				  		});
-				  	}
-				  }
-				});
+					  	if (files.length - 1 == i) {
+					  		parseRead(targHr, function (err, res) {
+					  			if (err) { cb(true, res); } 
+					  			else {
+						  			archive(dir, targHr, res, function (err, res) {
+							  			if (err) { cb(true, res); } 
+							  			else { cb(false, null); }
+						  			}); 
+					  			}
+					  		});
+					  	}
+					  }
+					});
+	    	}
 	    });
 		};
 
@@ -164,7 +169,6 @@ module.exports = {
 					cb(true, 'parseRead operation failed; too many errors.');
 				}
 			} else {
-				console.log('Finished loading files...');
 				var uniques = {},
 						ur =[];
 				allFiles.forEach(function (rows, i1) {
@@ -190,12 +194,12 @@ module.exports = {
 
 		function archive (dir, targHr, ar, cb) {
 			try {
-				var yr = dir[0].split('-')[0], 
-						fn = dir[0].split('-')[1] + '/' + dir[0].split('-')[2] + '/' + targHr + '.csv';
+				var yr = dir.split('-')[0], 
+						fn = dir.split('-')[1] + '/' + dir.split('-')[2] + '/' + targHr + '.csv';
 				var bSvc = azure.createBlobService(AZURECREDS.archive.account, AZURECREDS.archive.key);
 				bSvc.createContainerIfNotExists(yr, {publicAccessLevel : 'container'}, function(err, result, response) {
 					if (err) {
-						cb(true, response);
+						cb(true, 'Failed during archive() for container ' + yr + ' ' + response);
 					} else {
 						bSvc.createBlockBlobFromText(yr, fn, ar, function (error, result, response){
 						  if (error) { cb(true, error); } 
@@ -204,7 +208,7 @@ module.exports = {
 					}
 				});
 			} catch (e) {
-				cb(true, e);
+				cb(true, 'Failed prior to archive(), with response: ' + e);
 			};
 		};
 	}
