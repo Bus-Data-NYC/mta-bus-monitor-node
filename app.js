@@ -192,12 +192,19 @@ if (mtakey == undefined) {
 
 // manage bundler operations every 30 min (1800000 ms) do a check
 var lastBundleRun = null;
-var bundler = setTimeout(function () { 
-	var t = new Date(Date.now()).toISOString().split('T')
-	var targHr = Number(t[1].split('.')[0].split(':')[0]) - 1;
-	if (lastBundleRun !== t) ops.bundler(t, targHr);
-	bundler;
-}, 1800000);
+var bundler = function () {
+	setTimeout(function () { 
+		var t = new Date(Date.now()).toISOString().split('T');
+		var targHr = Number(t[1].split('.')[0].split(':')[0]) - 1 + 1;
+		if (lastBundleRun !== t) {
+			ops.bundler(t, targHr, function (err, errMsg) {
+				if (err) { emailError(errMsg); }
+			});
+		}
+		bundler();
+	}, 2000);
+};
+bundler();
 
 
 

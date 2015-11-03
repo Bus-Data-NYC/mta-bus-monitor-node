@@ -101,22 +101,23 @@ module.exports = {
 		});
 	},
 
-	bundler: function (t, targHr) {
+	bundler: function (t, targHr, cb) {
 		var dir = t[0];
+		var bSvc = azure.createBlobService(AZURECREDS.temp.account, AZURECREDS.temp.key);
 		bSvc.listBlobsSegmented(dir, null, function(err, result) {
 		  if (err) {
 		    console.log('Error compiling files data for day ' + t[0] + ', hour ' + targHr);
 		  } else {
 		    result.entries = result.entries.map(function (e) { return e.name; }).filter(function (e) { return String(targHr) == String(e[0] + e[1]); });
-		    dive(bSvc, dir, result.entries);
+		    dive(bSvc, dir, result.entries, function (err, res) { cb(err, res); });
 		  }
 		});
 
 		var allFiles = [];
 		var ctr = { state: 0, goal: 0, repeat: 0 };
-		function dive (bSvc, dir, files) {
-	    files.forEach(function (file, i) {
 
+		function dive (bSvc, dir, files, cb) {
+	    files.forEach(function (file, i) {
 				bSvc.getBlobToText(dir, file, function(err, data, meta) {
 					ctr.goal += 1;
 				  if (err) {
@@ -137,13 +138,18 @@ module.exports = {
 				  	allFiles.push(rows);
 
 				  	if (files.length - 1 == i) {
-				  		parseRead(targHr, function (allrows) {
-				  			archive(allrows); 
+				  		parseRead(targHr, function (err, res) {
+				  			if (err) { cb(true, res); } 
+				  			else {
+					  			archive(dir, targHr, res, function (err, res) {
+						  			if (err) { cb(true, res); } 
+						  			else { cb(false, null); }
+					  			}); 
+				  			}
 				  		});
 				  	}
 				  }
 				});
-
 	    });
 		};
 
@@ -155,9 +161,10 @@ module.exports = {
 					console.log('Still waiting to finish loading files...');
 					setTimeout(function () { parseRead(targHr) }, 20000);
 				} else {
-					console.log('Count failed; too many errors.')
+					cb(true, 'parseRead operation failed; too many errors.');
 				}
 			} else {
+				console.log('Finished loading files...');
 				var uniques = {},
 						ur =[];
 				allFiles.forEach(function (rows, i1) {
@@ -173,17 +180,33 @@ module.exports = {
 						}
 					});
 				});
+				var cols = ['timestamp', 'vehicle_id', 'latitude', 'longitude', 'bearing', 'progress', 'service_date', 'trip_id', 'block_assigned', 'next_stop_id', 'dist_along_route', 'dist_from_stop'];
+				ur = cols + '\r\n' + ur.join('\r\n') + '\r\n';
+
 				console.log('Finished processing ' + (allFiles.length - 1) + ' files for hour ' + targHr + '.');
-				cb(ur);
+				cb(false, ur);
 			}
 		};
 
-		function archive (ar) {
-			var bSvc = azure.createBlobService(AZURECREDS.archive.account, AZURECREDS.archive.key);
+		function archive (dir, targHr, ar, cb) {
+			try {
+				var yr = dir[0].split('-')[0], 
+						fn = dir[0].split('-')[1] + '/' + dir[0].split('-')[2] + '/' + targHr + '.csv';
+				var bSvc = azure.createBlobService(AZURECREDS.archive.account, AZURECREDS.archive.key);
+				bSvc.createContainerIfNotExists(yr, {publicAccessLevel : 'container'}, function(err, result, response) {
+					if (err) {
+						cb(true, response);
+					} else {
+						bSvc.createBlockBlobFromText(yr, fn, ar, function (error, result, response){
+						  if (error) { cb(true, error); } 
+						  else { cb(false, null); }
+						});
+					}
+				});
+			} catch (e) {
+				cb(true, e);
+			};
 		};
-
-
-
 	}
 
 }
