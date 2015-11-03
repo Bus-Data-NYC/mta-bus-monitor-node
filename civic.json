@@ -1,0 +1,14 @@
+{
+  "status": "Beta",
+  "thumbnailUrl": "https://avatars3.githubusercontent.com/u/14298272?v=3&s=200",
+  "bornAt": "BetaNYC Hacknights",
+  "geography": "NYC",
+  "politicalEntity":"",
+  "type":"Web Tool - API",
+  "needs": [
+    {"need": "Database Architect"},
+  ],
+  "categories": [
+    {"category": "Transportation"},
+  ]
+}
