@@ -7,6 +7,11 @@ var azure = require('azure-storage');
 var AZURECREDS = credentials.azure;
 
 module.exports = {
+
+	processSituationFeed: function (data) {
+		
+	},
+
 	processVehs: function (data) {
 		data = JSON.parse(data);
 		if (data !== undefined && data.Siri !== undefined && data.Siri.ServiceDelivery !== undefined) {

@@ -107,7 +107,7 @@ function requestWithEncoding (url, method, callback) {
 			} else if (encoding == 'deflate') {
 				zlib.inflate(buffer, function(err, decoded) {
 					callback(err, decoded && decoded.toString());
-				})
+				});
 			} else {
 				callback(null, buffer.toString());
 			}
@@ -196,7 +196,7 @@ var bundler = function () {
 	setTimeout(function () { 
 		var latest = new Date(Date.now());
 		var t = latest.toISOString().split('T');
-		var targHr = Number(t[1].split('.')[0].split(':')[0]) - 1 + 1;
+		var targHr = Number(t[1].split('.')[0].split(':')[0]) - 1;
 		if (lastBundleRun !== latest.getUTCHours()) {
 			ops.bundler(t, targHr, function (err, errMsg) {
 				if (err) { 
