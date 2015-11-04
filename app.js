@@ -47,7 +47,6 @@ if (credentials.nodemailer == undefined) {
 		mailOptions.html = mailOptions.text = '<b>Runtime Error: </b><br> Something happened: ' + errText;
 		transporter.sendMail(mailOptions, function (error, info) {
 		  if (error) console.log(error, info);
-		  else console.log('Message sent: ' + info.response);
 		});
 	};
 };
@@ -55,7 +54,8 @@ if (credentials.nodemailer == undefined) {
 // operations
 var ops = require('./ops.js'),
 		processVehs = ops.processVehs,
-		csvBundler = ops.csvBundler;
+		csvBundler = ops.csvBundler, 
+		archiveSituationFeed = ops.archiveSituationFeed;
 
 function startServer () {
 	var server = app.listen(3000, function () {
@@ -65,7 +65,7 @@ function startServer () {
 	});
 };
 
-function requestWithEncoding (url, method, callback) {
+function requestWithEncoding (url, method, cb) {
 	var headers = {
 		"accept-charset" : "ISO-8859-1,utf-8;q=0.7,*;q=0.3", 
 		"accept-language" : "en-US,en;q=0.8", 
@@ -99,14 +99,15 @@ function requestWithEncoding (url, method, callback) {
 			var encoding = res.headers['content-encoding'];
 			if (encoding == 'gzip') {
 				zlib.gunzip(buffer, function(err, decoded) {
-					callback(err, decoded && decoded.toString());
+					cb(err, JSON.parse(decoded && decoded.toString()));
 				});
 			} else if (encoding == 'deflate') {
 				zlib.inflate(buffer, function(err, decoded) {
-					callback(err, decoded && decoded.toString());
+					cb(err, JSON.parse(decoded && decoded.toString()));
 				});
 			} else {
-				callback(null, buffer.toString());
+				var b = JSON.parse(buffer.toString());
+				cb(null, b);
 			}
 		});
 	});
@@ -120,10 +121,11 @@ function runCall (method) {
 	requestWithEncoding(url, method, function(err, data) {
 		var t = new Date(Date.now()).toISOString().split('T');
 		if (err) {
-			console.log(err);
 			emailError('Error on request at day ' + t[0] + ' and time ' + t[1] + '. Error: ', err);
 		} else {
-			var vehicles = processVehs(data);
+			var vehicles = processVehs(data, function (err, msg) {
+				if (err) emailError(msg);
+			});
 			if (vehicles.length > 0) {
 				// convert each obj in array to a list/array
 				vehicles = vehicles.map(function (veh) {
@@ -136,6 +138,10 @@ function runCall (method) {
 			} else {
 				emailError('0 vehicles returned after processing on request at day ' + t[0] + ' and time ' + t[1]);
 			}
+
+			archiveSituationFeed(data, function (err, msg) {
+				if (err) emailError(msg);
+			});
 		}
 	})
 };
@@ -202,6 +208,6 @@ var bundler = function () {
 		}
 		lastBundleRun = targHr;
 		bundler();
-	}, 2000);
+	}, 600000);
 };
 bundler();

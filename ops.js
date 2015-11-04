@@ -23,21 +23,25 @@ module.exports = {
 					fn = d[0] + '/' + d[1] + '/' + d[2] + '/' + hr + '.json';
 
 			var bSvc = azure.createBlobService(AZURECREDS.temp.account, AZURECREDS.temp.key);
-			bSvc.createBlockBlobFromText('situatiion_exchange/', fn, sx, function (err, result, response){
-			  if (err) {
-			    cb(true, 'Error listing blob for ' + dir + ', hour ' + targHr + '. Error res: ' + result);
-			  } else {
-			    cb(false, null);
-			  }
+			bSvc.createContainerIfNotExists('situations', function(err, result, response) {
+		    if (err) {
+		    	cb(true, 'Failed to create situations container in Azure.');
+		    } else {
+					bSvc.createBlockBlobFromText('situations', fn, sx, function (err, result, response){
+					  if (err) {
+					    cb(true, 'Error listing blob for ' + dir + ', hour ' + targHr + '. Error res: ' + result);
+					  } else {
+					    cb(false, null);
+					  }
+					});
+		    }
 			});
-
 		} catch (e) {
-			cb(true, 'Failed to parse data.Siri.ServiceDelivery: ' + e);
+			cb(true, 'Failed to handle data.Siri.ServiceDelivery: ' + e);
 		}
 	},
 
-	processVehs: function (data) {
-		data = JSON.parse(data);
+	processVehs: function (data, cb) {
 		if (data !== undefined && typeof data == 'object' && 
 				data.Siri !== undefined && data.Siri.ServiceDelivery !== undefined) {
 			var del = data.Siri.ServiceDelivery,
@@ -103,8 +107,8 @@ module.exports = {
 				return vehicles;
 			}
 		} else {
-			var csvBundlercurTime = new Date(Date.now()).toString()
-			console.log('Errored/empty results processor at time ' + curTim);
+			var curTime = new Date(Date.now()).toString();
+			cb(true, 'Errored or empty results processor at time ' + curTime)
 			return [];
 		}
 	},
