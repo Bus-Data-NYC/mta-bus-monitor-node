@@ -25,7 +25,7 @@ var credentials = require('./credentials.js');
 
 // other tools
 var nodemailer = require('nodemailer');
-var emailError = function () { console.log('Error occured but not email information included so email alert not sent.'); };
+var emailError = function () {
 if (credentials.nodemailer == undefined) {
 	console.log('Warning: Missing email login information.');
 } else {
@@ -40,16 +40,14 @@ if (credentials.nodemailer == undefined) {
     from: credentials.nodemailer.options.from,
     to: credentials.nodemailer.options.to,
     subject: 'Bus Monitor Runtime Error',
-    text: 'Hello world ✔',
+    text: '',
     html: ''
 	};
 	var emailError = function (errText) {
-		mailOptions.html = '<b>Runtime Error: </b><br> Something happened: ' + errText;
+		mailOptions.html = mailOptions.text = '<b>Runtime Error: </b><br> Something happened: ' + errText;
 		transporter.sendMail(mailOptions, function(error, info){
-		  if (error)
-		    return console.log(error);
-		  else
-		  	console.log('Message sent: ' + info.response);
+		  if (error) console.log(error, info);
+		  else console.log('Message sent: ' + info.response);
 		});
 	};
 };
@@ -121,12 +119,12 @@ function requestWithEncoding (url, method, callback) {
 
 function runCall (method) {
 	requestWithEncoding(url, method, function(err, data) {
+		var t = new Date(Date.now()).toISOString().split('T');
 		if (err) {
-			var t = new Date(Date.now()).toISOString().split('T');
-			console.log('Error on request at day ' + t[0] + ' at time ' + t[1] + '. Error: ', err);
+			console.log(err);
+			emailError('Error on request at day ' + t[0] + ' and time ' + t[1] + '. Error: ', err);
 		} else {
 			var vehicles = processVehs(data);
-
 			if (vehicles.length > 0) {
 				// convert each obj in array to a list/array
 				vehicles = vehicles.map(function (veh) {
@@ -142,6 +140,8 @@ function runCall (method) {
 					if (err) emailError(msg);
 					console.log(msg);
 				});
+			} else {
+				emailError('0 vehicles returned after processing on request at day ' + t[0] + ' and time ' + t[1]);
 			}
 		}
 	})
@@ -183,32 +183,32 @@ if (mtakey == undefined) {
 		if (researchLength > 0)
 			setTimeout(function () { kill(); }, researchLength);
 	} else if (method == 1 || method == 2 || method == 3) {
-		intervalGlobal = true;
-		runCall(method);
-		if (researchLength > 0)
-			setTimeout(function () { kill(); }, researchLength);
+		// intervalGlobal = true;
+		// runCall(method);
+		// if (researchLength > 0)
+		// 	setTimeout(function () { kill(); }, researchLength);
 	}
 };
 
-// manage bundler operations every 30 min (1800000 ms) do a check
+// manage bundler operations every 10 min (600000 ms) do a check
 var lastBundleRun = null;
 var bundler = function () {
 	setTimeout(function () { 
-		var latest = new Date(Date.now());
-		var t = latest.toISOString().split('T');
-		var targHr = Number(t[1].split('.')[0].split(':')[0]) - 1;
-		if (lastBundleRun !== latest.getUTCHours()) {
+		var latest = new Date(Date.now()).getUTCHours();
+		var targHr = Number(latest) - 1;
+		if (lastBundleRun !== targHr) {
 			ops.bundler(t, targHr, function (err, errMsg) {
 				if (err) { 
-					console.log('Fail')
 					lastBundleRun = null;
 					emailError(errMsg); 
+				} else {
+					console.log('Success');
 				}
 			});
 		}
-		lastBundleRun = latest.getUTCHours();
+		lastBundleRun = targHr;
 		bundler();
-	}, 1800000);
+	}, 2000);
 };
 bundler();
 

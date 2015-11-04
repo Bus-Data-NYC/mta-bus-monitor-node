@@ -8,8 +8,32 @@ var AZURECREDS = credentials.azure;
 
 module.exports = {
 
-	processSituationFeed: function (data) {
-		
+	archiveSituationFeed: function (data, cb) {
+		try {
+			var d = data.Siri.ServiceDelivery;
+			var sx;
+			if (d.hasOwnProperty('SituationExchangeDelivery')) {
+				sx = '{"SituationExchangeDelivery":' + JSON.stringify(d) + '}';
+			} else {
+				sx = '{"SituationExchangeDelivery":[]}';
+			}
+			var t = new Date(Date.now()).toISOString().split('T'),
+					hr = Number(t[1].split('.')[0].split(':')[0]) - 1,
+					d = t[0].split('-'),
+					fn = d[0] + '/' + d[1] + '/' + d[2] + '/' + hr + '.json';
+
+			var bSvc = azure.createBlobService(AZURECREDS.temp.account, AZURECREDS.temp.key);
+			bSvc.createBlockBlobFromText('situatiion_exchange/', fn, sx, function (err, result, response){
+			  if (err) {
+			    cb(true, 'Error listing blob for ' + dir + ', hour ' + targHr + '. Error res: ' + result);
+			  } else {
+			    cb(false, null);
+			  }
+			});
+
+		} catch (e) {
+			cb(true, 'Failed to parse data.Siri.ServiceDelivery: ' + e);
+		}
 	},
 
 	processVehs: function (data) {
