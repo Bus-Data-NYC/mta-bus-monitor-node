@@ -19,8 +19,9 @@ module.exports = {
 			}
 			var t = new Date(Date.now()).toISOString().split('T'),
 					hr = Number(t[1].split('.')[0].split(':')[0]) - 1,
-					d = t[0].split('-'),
-					fn = d[0] + '/' + d[1] + '/' + d[2] + '/' + hr + '.json';
+					d = t[0].split('-').join('/'),
+					s = t[1].split('.')[0].split(':').join(''),
+					fn = d + '/' + hr + '/' + s + '.json';
 
 			var bSvc = azure.createBlobService(AZURECREDS.temp.account, AZURECREDS.temp.key);
 			bSvc.createContainerIfNotExists('situations', function(err, result, response) {
