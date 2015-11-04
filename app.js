@@ -25,7 +25,7 @@ var credentials = require('./credentials.js');
 
 // other tools
 var nodemailer = require('nodemailer');
-var emailError = function () {
+var emailError = function () { console.log('Error occured but not email information included so email alert not sent.'); };
 if (credentials.nodemailer == undefined) {
 	console.log('Warning: Missing email login information.');
 } else {
@@ -43,9 +43,9 @@ if (credentials.nodemailer == undefined) {
     text: '',
     html: ''
 	};
-	var emailError = function (errText) {
+	emailError = function (errText) {
 		mailOptions.html = mailOptions.text = '<b>Runtime Error: </b><br> Something happened: ' + errText;
-		transporter.sendMail(mailOptions, function(error, info){
+		transporter.sendMail(mailOptions, function (error, info) {
 		  if (error) console.log(error, info);
 		  else console.log('Message sent: ' + info.response);
 		});
@@ -89,7 +89,6 @@ function requestWithEncoding (url, method, callback) {
 				firstChunk = false;
 				setTimeout(function () { runCall(method); }, 30000);
 			}
-
 			chunks.push(chunk);
 		});
 
@@ -130,16 +129,10 @@ function runCall (method) {
 				vehicles = vehicles.map(function (veh) {
 					var keys = Object.keys(veh);
 					var res = []
-					keys.forEach(function (key) {
-						res.push(veh[key]);
-					});
+					keys.forEach(function (key) { res.push(veh[key]); });
 					return res;
 				}); 
-				
-				csvBundler(vehicles, function (err, msg) {
-					if (err) emailError(msg);
-					console.log(msg);
-				});
+				csvBundler(vehicles, function (err, msg) { if (err) { emailError(msg); } });
 			} else {
 				emailError('0 vehicles returned after processing on request at day ' + t[0] + ' and time ' + t[1]);
 			}
@@ -183,10 +176,10 @@ if (mtakey == undefined) {
 		if (researchLength > 0)
 			setTimeout(function () { kill(); }, researchLength);
 	} else if (method == 1 || method == 2 || method == 3) {
-		// intervalGlobal = true;
-		// runCall(method);
-		// if (researchLength > 0)
-		// 	setTimeout(function () { kill(); }, researchLength);
+		intervalGlobal = true;
+		runCall(method);
+		if (researchLength > 0)
+			setTimeout(function () { kill(); }, researchLength);
 	}
 };
 
@@ -194,10 +187,11 @@ if (mtakey == undefined) {
 var lastBundleRun = null;
 var bundler = function () {
 	setTimeout(function () { 
-		var latest = new Date(Date.now()).getUTCHours();
-		var targHr = Number(latest) - 1;
+		var dir = new Date(Date.now()).toISOString().split('T')[0];
+		var latest = new Date(Date.now());
+		var targHr = Number(latest.getUTCHours()) - 1;
 		if (lastBundleRun !== targHr) {
-			ops.bundler(t, targHr, function (err, errMsg) {
+			ops.bundler(dir, targHr, function (err, errMsg) {
 				if (err) { 
 					lastBundleRun = null;
 					emailError(errMsg); 
@@ -211,18 +205,3 @@ var bundler = function () {
 	}, 2000);
 };
 bundler();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

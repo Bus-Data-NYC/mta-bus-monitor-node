@@ -38,7 +38,8 @@ module.exports = {
 
 	processVehs: function (data) {
 		data = JSON.parse(data);
-		if (data !== undefined && data.Siri !== undefined && data.Siri.ServiceDelivery !== undefined) {
+		if (data !== undefined && typeof data == 'object' && 
+				data.Siri !== undefined && data.Siri.ServiceDelivery !== undefined) {
 			var del = data.Siri.ServiceDelivery,
 					vehs = del.VehicleMonitoringDelivery[0],
 					warn = del.SituationExchangeDelivery[0];
@@ -130,8 +131,7 @@ module.exports = {
 		});
 	},
 
-	bundler: function (t, targHr, cb) {
-		var dir = t[0];
+	bundler: function (dir, targHr, cb) {
 		var bSvc = azure.createBlobService(AZURECREDS.temp.account, AZURECREDS.temp.key);
 		bSvc.listBlobsSegmented(dir, null, function(err, result) {
 		  if (err) {
