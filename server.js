@@ -2,58 +2,35 @@ function super_ops () {
 	var http = require('http');
 	var request = require('request');
 
-	// packaging
-	var zlib = require('zlib');
-
 	// file handling
+	var zlib = require('zlib');
 	var fs = require('fs');
 	var mkdirp = require('mkdirp').mkdirp;
 
 	// private information
 	var credentials = require('./credentials.js');
 
-	// other tools
-	var nodemailer = require('nodemailer');
-	var emailError = function () { console.log('Error occured but not email information included so email alert not sent.'); };
-	if (credentials.nodemailer == undefined) {
-		console.log('Warning: Missing email login information.');
-	} else {
-		var transporter = nodemailer.createTransport({
-		  service: credentials.nodemailer.service,
-		  auth: {
-		    user: credentials.nodemailer.auth.user,
-		    pass: credentials.nodemailer.auth.pass
-		  }
-		});
-		var mailOptions = {
-	    from: credentials.nodemailer.options.from,
-	    to: credentials.nodemailer.options.to,
-	    subject: 'Bus Monitor Runtime Error',
-	    text: '',
-	    html: ''
-		};
-		emailError = function (errText) {
-			mailOptions.html = mailOptions.text = '<b>Runtime Error: </b><br> Something happened: ' + errText;
-			transporter.sendMail(mailOptions, function (error, info) {
-			  if (error) console.log(error, info);
-			});
-		};
-	};
+	// operations tools
+	var emailError = require('./utils/emailError.js').emailError,
+			archiveSituationFeed = require('./utils/archiveSituationFeed.js').archiveSituationFeed,
+			processVehs = require('./utils/processVehs.js').processVehs;
 
 	// operations
 	var ops = require('./ops.js'),
-			processVehs = ops.processVehs,
-			csvBundler = ops.csvBundler, 
-			archiveSituationFeed = ops.archiveSituationFeed;
+			csvBundler = ops.csvBundler;
+			
+
+
 
 	function requestWithEncoding (url, method, cb) {
 		var headers = {
-			"accept-charset" : "ISO-8859-1,utf-8;q=0.7,*;q=0.3", 
-			"accept-language" : "en-US,en;q=0.8", 
-			"accept" : "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", 
-			"user-agent" : "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_6_8) AppleWebKit/537.13+ (KHTML, like Gecko) Version/5.1.7 Safari/534.57.2", 
-			"accept-encoding" : "gzip,deflate"
+			"accept-charset": "ISO-8859-1,utf-8;q=0.7,*;q=0.3", 
+			"accept-language": "en-US,en;q=0.8", 
+			"accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", 
+			"user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_6_8) AppleWebKit/537.13+ (KHTML, like Gecko) Version/5.1.7 Safari/534.57.2", 
+			"accept-encoding": "gzip,deflate"
 		};
+
 		var options = {url: url, headers: headers};
 		var req = request.get(options);
 
@@ -64,6 +41,7 @@ function super_ops () {
 
 			var chunks = [],
 					firstChunk = true;
+
 			res.on('data', function(chunk) {
 				// if method start timer for next call now
 				if (method == 2 && intervalGlobal == true && firstChunk == true) {
@@ -97,47 +75,62 @@ function super_ops () {
 		});
 	};
 
+
 	function runCall (method) {
 		requestWithEncoding(url, method, function(err, data) {
-			if (typeof data == 'string' && data.indexOf("<?xml") > -1 && data.indexOf("<?xml") < 5) {
-				emailError('Received XML instead of JSON: ', data);
-			} else {
-				var t = new Date(Date.now()).toISOString().split('T');
-				if (err) {
-					emailError('Error on request at day ' + t[0] + ' and time ' + t[1] + '. Error: ', err);
-				} else {
-					var vehicles = processVehs(data, function (err, msg) {
-						if (err) emailError(msg);
-					});
-					if (vehicles.length > 0) {
-						// convert each obj in array to a list/array
-						vehicles = vehicles.map(function (veh) {
-							var keys = Object.keys(veh);
-							var res = []
-							keys.forEach(function (key) { res.push(veh[key]); });
-							return res;
-						}); 
-						csvBundler(vehicles, function (err, msg) { 
-							if (err) { emailError(msg); }
-							else { console.log(msg); }
-						});
-					} else {
-						emailError('0 vehicles returned after processing on request at day ' + t[0] + ' and time ' + t[1]);
-					}
+			try {
+				var t = new Date(Date.now()).toISOString().split('T'),
+						xmlIndex = data.indexOf('<?xml');
 
-					archiveSituationFeed(data, function (err, msg) {
-						if (err) emailError(msg);
-					});
+				// sometimes we get returned xml for some reason, this handles that
+				if (typeof data == 'string' && xmlIndex > -1 && xmlIndex < 5) {
+					emailError('Received XML instead of JSON: ' + data);
+
+				} else {
+					if (err) {
+						emailError('Error returned to requestWithEncoding callback: ' + err);
+
+					} else {
+						var vehicles = null;
+
+						// creates cleaned JSON for each row
+						processVehs(data, function (err, res) {
+							if (err) emailError('Error returned to processVehs callback: ' + res);
+							else vehicles = res;
+						});
+
+						// convert each obj in array to a list/array
+						if (!vehicles && vehicles.length > 0) {
+							vehicles = vehicles.map(function (veh) {
+								var keys = Object.keys(veh);
+								var res = []
+								keys.forEach(function (key) { res.push(veh[key]); });
+								return res;
+							}); 
+							csvBundler(vehicles, function (err, msg) { 
+								if (err) { emailError(msg); }
+								else { console.log(msg); }
+							});
+
+						} else {
+							emailError('No vehicles returned from processVehs');
+						}
+
+						archiveSituationFeed(data, function (err, msg) {
+							if (err) emailError('Error returned in archiveSituationFeed callback: ' + msg);
+						});
+					}
 				}
+			} catch (e) {
+				emailError('Error during requestWithEncoding callback: ' + e);
 			}
 		})
 	};
 
+
 	function kill () {
-		if (intervalGlobal == true)
-			intervalGlobal = false;
-		else
-			clearInterval(intervalGlobal);
+		if (intervalGlobal == true) intervalGlobal = false;
+		else clearInterval(intervalGlobal);
 		console.log('Stopping calls, wrapping up.');
 	};
 
@@ -149,6 +142,7 @@ function super_ops () {
 	if (mtakey == undefined) {
 		if (mtakey == 'production')
 		console.log('Failed: Supply an MTA Bustime API key in order to run.');
+
 	} else {
 		var method = ((process.argv[2] == 'default') || (process.argv[2] == 'production')) ? 1 : Number(process.argv[2]),
 				researchLength = ((process.argv[3] !== undefined) && (isNaN(Number(process.argv[3])) == false)) ? Number(process.argv[3]) : ((process.argv[3] == 'production') ? 0 : 0),
@@ -177,6 +171,7 @@ function super_ops () {
 		}
 	};
 
+
 	// manage bundler operations every 10 min (600000 ms) do a check
 	var lastBundleRun = null;
 	var bundler = function () {
@@ -188,7 +183,7 @@ function super_ops () {
 				ops.bundler(dir, targHr, function (err, errMsg) {
 					if (err) { 
 						lastBundleRun = null;
-						emailError(errMsg); 
+						emailError('Error returned in bundler callback: ' + errMsg); 
 					}
 				});
 			}
