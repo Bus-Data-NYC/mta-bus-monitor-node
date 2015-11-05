@@ -43,7 +43,7 @@ module.exports = {
 	},
 
 	processVehs: function (data, cb) {
-		if (data !== undefined && typeof data == 'object' && 
+		if (data !== undefined  && data !== null && typeof data == 'object' && 
 				data.Siri !== undefined && data.Siri.ServiceDelivery !== undefined) {
 			var del = data.Siri.ServiceDelivery,
 					vehs = del.VehicleMonitoringDelivery[0],
