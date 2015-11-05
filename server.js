@@ -99,15 +99,14 @@ function requestWithEncoding (url, method, cb) {
 			var encoding = res.headers['content-encoding'];
 			if (encoding == 'gzip') {
 				zlib.gunzip(buffer, function(err, decoded) {
-					cb(err, JSON.parse(decoded && decoded.toString()));
+					cb(err, decoded && decoded.toString());
 				});
 			} else if (encoding == 'deflate') {
 				zlib.inflate(buffer, function(err, decoded) {
-					cb(err, JSON.parse(decoded && decoded.toString()));
+					cb(err, decoded && decoded.toString());
 				});
 			} else {
-				var b = JSON.parse(buffer.toString());
-				cb(null, b);
+				cb(null, buffer.toString());
 			}
 		});
 	});
@@ -119,32 +118,36 @@ function requestWithEncoding (url, method, cb) {
 
 function runCall (method) {
 	requestWithEncoding(url, method, function(err, data) {
-		var t = new Date(Date.now()).toISOString().split('T');
-		if (err) {
-			emailError('Error on request at day ' + t[0] + ' and time ' + t[1] + '. Error: ', err);
+		if (typeof data == 'string' && data.indexOf("<?xml") > -1 && data.indexOf("<?xml") < 5) {
+			emailError('Received XML instead of JSON: ', data);
 		} else {
-			var vehicles = processVehs(data, function (err, msg) {
-				if (err) emailError(msg);
-			});
-			if (vehicles.length > 0) {
-				// convert each obj in array to a list/array
-				vehicles = vehicles.map(function (veh) {
-					var keys = Object.keys(veh);
-					var res = []
-					keys.forEach(function (key) { res.push(veh[key]); });
-					return res;
-				}); 
-				csvBundler(vehicles, function (err, msg) { 
-					if (err) { emailError(msg); }
-					else { console.log(msg); }
-				});
+			var t = new Date(Date.now()).toISOString().split('T');
+			if (err) {
+				emailError('Error on request at day ' + t[0] + ' and time ' + t[1] + '. Error: ', err);
 			} else {
-				emailError('0 vehicles returned after processing on request at day ' + t[0] + ' and time ' + t[1]);
-			}
+				var vehicles = processVehs(data, function (err, msg) {
+					if (err) emailError(msg);
+				});
+				if (vehicles.length > 0) {
+					// convert each obj in array to a list/array
+					vehicles = vehicles.map(function (veh) {
+						var keys = Object.keys(veh);
+						var res = []
+						keys.forEach(function (key) { res.push(veh[key]); });
+						return res;
+					}); 
+					csvBundler(vehicles, function (err, msg) { 
+						if (err) { emailError(msg); }
+						else { console.log(msg); }
+					});
+				} else {
+					emailError('0 vehicles returned after processing on request at day ' + t[0] + ' and time ' + t[1]);
+				}
 
-			archiveSituationFeed(data, function (err, msg) {
-				if (err) emailError(msg);
-			});
+				archiveSituationFeed(data, function (err, msg) {
+					if (err) emailError(msg);
+				});
+			}
 		}
 	})
 };
