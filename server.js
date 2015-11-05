@@ -13,11 +13,9 @@ function super_ops () {
 	// operations tools
 	var emailError = require('./utils/emailError.js').emailError,
 			archiveSituationFeed = require('./utils/archiveSituationFeed.js').archiveSituationFeed,
-			processVehs = require('./utils/processVehs.js').processVehs;
-
-	// operations
-	var ops = require('./ops.js'),
-			csvBundler = ops.csvBundler;
+			processVehs = require('./utils/processVehs.js').processVehs,
+			csvBundler = require('./utils/csvBundler.js').csvBundler,
+			timeBundler = require('./utils/timeBundler.js').timeBundler;
 			
 
 
@@ -187,7 +185,7 @@ function super_ops () {
 			var latest = new Date(Date.now());
 			var targHr = Number(latest.getUTCHours()) - 1;
 			if (lastBundleRun !== targHr) {
-				ops.bundler(dir, targHr, function (err, errMsg) {
+				timeBundler(dir, targHr, function (err, errMsg) {
 					if (err) { 
 						lastBundleRun = null;
 						emailError('Error returned in bundler callback: ' + errMsg); 

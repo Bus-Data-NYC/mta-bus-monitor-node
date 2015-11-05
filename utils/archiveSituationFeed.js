@@ -1,6 +1,3 @@
-var fs = require('fs');
-var mkdirp = require('mkdirp').mkdirp;
-
 var credentials = require('../credentials.js');
 
 var azure = require('azure-storage');
