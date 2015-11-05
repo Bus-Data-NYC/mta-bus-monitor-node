@@ -23,56 +23,60 @@ function super_ops () {
 
 
 	function requestWithEncoding (url, method, cb) {
-		var headers = {
-			"accept-charset": "ISO-8859-1,utf-8;q=0.7,*;q=0.3", 
-			"accept-language": "en-US,en;q=0.8", 
-			"accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", 
-			"user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_6_8) AppleWebKit/537.13+ (KHTML, like Gecko) Version/5.1.7 Safari/534.57.2", 
-			"accept-encoding": "gzip,deflate"
-		};
+		try {
+			var headers = {
+				"accept-charset": "ISO-8859-1,utf-8;q=0.7,*;q=0.3", 
+				"accept-language": "en-US,en;q=0.8", 
+				"accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", 
+				"user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_6_8) AppleWebKit/537.13+ (KHTML, like Gecko) Version/5.1.7 Safari/534.57.2", 
+				"accept-encoding": "gzip,deflate"
+			};
 
-		var options = {url: url, headers: headers};
-		var req = request.get(options);
+			var options = {url: url, headers: headers};
+			var req = request.get(options);
 
-		req.on('response', function(res) {
-			// if method start timer for next call now
-			if (method == 1 && intervalGlobal == true)
-				setTimeout(function () { runCall(method); }, 30000);
-
-			var chunks = [],
-					firstChunk = true;
-
-			res.on('data', function(chunk) {
+			req.on('response', function(res) {
 				// if method start timer for next call now
-				if (method == 2 && intervalGlobal == true && firstChunk == true) {
-					firstChunk = false;
+				if (method == 1 && intervalGlobal == true)
 					setTimeout(function () { runCall(method); }, 30000);
-				}
-				chunks.push(chunk);
+
+				var chunks = [],
+						firstChunk = true;
+
+				res.on('data', function(chunk) {
+					// if method start timer for next call now
+					if (method == 2 && intervalGlobal == true && firstChunk == true) {
+						firstChunk = false;
+						setTimeout(function () { runCall(method); }, 30000);
+					}
+					chunks.push(chunk);
+				});
+
+				res.on('end', function() {
+					if (method == 3 && intervalGlobal == true)
+						setTimeout(function () { runCall(method); }, 30000);
+					var buffer = Buffer.concat(chunks);
+					var encoding = res.headers['content-encoding'];
+					if (encoding == 'gzip') {
+						zlib.gunzip(buffer, function(err, decoded) {
+							cb(err, decoded && decoded.toString());
+						});
+					} else if (encoding == 'deflate') {
+						zlib.inflate(buffer, function(err, decoded) {
+							cb(err, decoded && decoded.toString());
+						});
+					} else {
+						cb(false, buffer.toString());
+					}
+				});
 			});
 
-			res.on('end', function() {
-				if (method == 3 && intervalGlobal == true)
-					setTimeout(function () { runCall(method); }, 30000);
-				var buffer = Buffer.concat(chunks);
-				var encoding = res.headers['content-encoding'];
-				if (encoding == 'gzip') {
-					zlib.gunzip(buffer, function(err, decoded) {
-						cb(err, decoded && decoded.toString());
-					});
-				} else if (encoding == 'deflate') {
-					zlib.inflate(buffer, function(err, decoded) {
-						cb(err, decoded && decoded.toString());
-					});
-				} else {
-					cb(null, buffer.toString());
-				}
+			req.on('error', function(err) {
+				cb(true, err);
 			});
-		});
-
-		req.on('error', function(err) {
-			callback(err);
-		});
+		} catch (e) {
+			cb(true, e);
+		}
 	};
 
 
@@ -91,6 +95,9 @@ function super_ops () {
 						emailError('Error returned to requestWithEncoding callback: ' + err);
 
 					} else {
+						// if data is a string, parse it
+						if (typeof data == 'string') data = JSON.parse(data);
+
 						var vehicles = null;
 
 						// creates cleaned JSON for each row
@@ -100,25 +107,25 @@ function super_ops () {
 						});
 
 						// convert each obj in array to a list/array
-						if (!vehicles && vehicles.length > 0) {
+						if (vehicles && vehicles.length > 0) {
 							vehicles = vehicles.map(function (veh) {
 								var keys = Object.keys(veh);
 								var res = []
 								keys.forEach(function (key) { res.push(veh[key]); });
 								return res;
 							}); 
+
 							csvBundler(vehicles, function (err, msg) { 
 								if (err) { emailError(msg); }
 								else { console.log(msg); }
 							});
 
+							archiveSituationFeed(data, function (err, msg) {
+								if (err) emailError('Error returned in archiveSituationFeed callback: ' + msg);
+							});
 						} else {
-							emailError('No vehicles returned from processVehs');
+							console.log('No vehicles trips parsed on call.');
 						}
-
-						archiveSituationFeed(data, function (err, msg) {
-							if (err) emailError('Error returned in archiveSituationFeed callback: ' + msg);
-						});
 					}
 				}
 			} catch (e) {

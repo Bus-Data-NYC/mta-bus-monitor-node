@@ -78,12 +78,11 @@ function processVehs (data, cb) {
 				cb(false, vehicles);
 			}
 		} else {
-			var ct = new Date(Date.now()).toString();
-			cb(true, 'Errored or empty results processor at time ' + ct)
+			try { data = data.toString(); } catch (e) { data = '[failed to convert to string]'; }
+			cb(true, 'Bad parameters. The data variable missing necessary property attributes. var data = ' + data);
 		}
 	} catch (e) {
-		var ct = new Date(Date.now()).toString();
-		cb(true, 'Errored during processVehs operation at ' + ct)
+		cb(true, 'Errored during processVehs operation, unknown specifics.');
 	}
 };
 
