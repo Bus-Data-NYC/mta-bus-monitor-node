@@ -134,7 +134,10 @@ function runCall (method) {
 					keys.forEach(function (key) { res.push(veh[key]); });
 					return res;
 				}); 
-				csvBundler(vehicles, function (err, msg) { if (err) { emailError(msg); } });
+				csvBundler(vehicles, function (err, msg) { 
+					if (err) { emailError(msg); }
+					else { console.log(msg); }
+				});
 			} else {
 				emailError('0 vehicles returned after processing on request at day ' + t[0] + ' and time ' + t[1]);
 			}
@@ -201,8 +204,6 @@ var bundler = function () {
 				if (err) { 
 					lastBundleRun = null;
 					emailError(errMsg); 
-				} else {
-					console.log('Success');
 				}
 			});
 		}
