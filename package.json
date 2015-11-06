@@ -4,8 +4,7 @@
   "description": "Parse 30 second interval SIRI feed",
   "main": "index.js",
   "scripts": {
-    "test": "npm test",
-    "start": "node app.js"
+    "start": "node server-cluster.js"
   },
   "repository": {
     "type": "git",

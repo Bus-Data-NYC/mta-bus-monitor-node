@@ -155,7 +155,7 @@ function super_ops () {
 
 		if (isNaN(method) || method < 0 || method > 3) {
 			method = 1;
-			console.log('No method provided; using default method #1.');
+			console.log('No method provided; using default Method #1.');
 		} else {
 			console.log('Method defined as ', method);
 		}
