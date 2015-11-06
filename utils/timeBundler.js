@@ -3,61 +3,69 @@ var credentials = require('../credentials.js');
 var azure = require('azure-storage');
 var AZURECREDS = credentials.azure;
 
-function timeBundler (dir, targHr, cb) {
-	var bSvc = azure.createBlobService(AZURECREDS.temp.account, AZURECREDS.temp.key);
-	bSvc.listBlobsSegmented(dir, null, function(err, result) {
-		if (err) {
-			cb(true, 'Error listing blob for ' + dir + ', hour ' + targHr + '. Error res: ' + result);
-		} else {
-			result.entries = result.entries.map(function (e) { return e.name; }).filter(function (e) { return String(targHr) == String(e[0] + e[1]); });
-			dive(bSvc, dir, result.entries, function (err, res) { cb(err, res); });
-		}
-	});
+function timeBundler (dir, hr, cb) {
+	try {
+		var bSvc = azure.createBlobService(AZURECREDS.temp.account, AZURECREDS.temp.key);
+		bSvc.listBlobsSegmented(dir, null, function(err, result) {
+			if (err) {
+				cb(true, 'Error listing blob for ' + dir + ', hour ' + hr + '. Error res: ' + result);
+			} else {
+				var files = result.entries.map(function (ea) { 
+					return ea.name;
+				}).filter(function (ea) { 
+					return String(hr) == String(ea[0] + ea[1]);
+				});
 
-	var allFiles = [];
-	var ctr = { state: 0, goal: 0, repeat: 0 };
+				var anyErrors = false;
 
-	function dive (bSvc, dir, files, cb) {
-		var anyErrors = false;
-		files.forEach(function (file, i) {
-			if (anyErrors == false) {
-				bSvc.getBlobToText(dir, file, function(err, data, meta) {
-					ctr.goal += 1;
-					if (err) {
-						// if any errors occur while parsing any of the files, send an email and kill ops
-						anyErrors = true;
-						cb(false, 'Error reading file: ' + file + ' in dir: ' + dir + '. Error: ', err);
-					} else {
-						var rows = [];
+				files.forEach(function (file, i) {
+					if (anyErrors == false) {
+						bSvc.getBlobToText(dir, file, function(err, data, meta) {
+							ctr.goal += 1;
+							if (err) {
+								anyErrors = true; // if errors occur with any file, send email, kill ops
+								cb(true, 'Error reading file: ' + file + ' in dir: ' + dir + '. Error: ', err);
+							} else {
+								var rows = [];
 
-						data = data.split('\r\n');
-						data.shift(); // drop first row
+								data = data.split('\r\n');
+								data.shift(); // drop first row, col headers
 
-						data.forEach(function (row) {
-							var sp = row.split(',');
-							if (sp.length == 12) // only add if its a complete row
-								rows.push(sp);
-						});
+								data.forEach(function (row) {
+									var sp = row.split(',');
+									if (sp.length == 12) // only add if its a complete row
+										rows.push(sp);
+								});
 
-						ctr.state += 1;
-						allFiles.push(rows);
+								ctr.state += 1;
+								allFiles.push(rows);
 
-						if (files.length - 1 == i) {
-							parseRead(targHr, function (err, res) {
-								if (err) { cb(true, res); } 
-								else {
-									archive(dir, targHr, res, function (err, res) {
+								// run parseRead() on last file
+								if (files.length - 1 == i) {
+									parseRead(hr, function (err, res) {
 										if (err) { cb(true, res); } 
-										else { cb(false, null); }
-									}); 
+										else {
+											archive(dir, hr, res, function (err, res) {
+												if (err) { cb(true, res); } 
+												else { cb(false, null); }
+											}); 
+										}
+									});
 								}
-							});
-						}
+							}
+						});
 					}
 				});
 			}
-		});
-	};
+		} catch (e) {
+			cb(true, 'Error occurred during timeBundler operation: ' + e);
+		}
+	});
+
+	// function global
+	var allFiles = [];
+	var ctr = { state: 0, goal: 0, repeat: 0 };
+
 
 	function parseRead (targHr, cb) {
 		// ctr is a control against running parseRead without finishing file reads
