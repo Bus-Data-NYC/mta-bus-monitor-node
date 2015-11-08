@@ -5,7 +5,6 @@ function super_ops () {
 	// file handling
 	var zlib = require('zlib');
 	var fs = require('fs');
-	var mkdirp = require('mkdirp').mkdirp;
 
 	// private information
 	var credentials = require('./credentials.js');
@@ -79,57 +78,59 @@ function super_ops () {
 
 
 	function runCall (method) {
-		requestWithEncoding(url, method, function(err, data) {
-			try {
-				var t = new Date(Date.now()).toISOString().split('T'),
-						xmlIndex = data.indexOf('<?xml');
+		// requestWithEncoding(url, method, function(err, data) {
+		// 	try {
+		// 		var t = new Date(Date.now()).toISOString().split('T'),
+		// 				xmlIndex = data.indexOf('<?xml'),
+		// 				errIndex = data.indexOf('Server Error');
 
-				// sometimes we get returned xml for some reason, this handles that
-				if (typeof data == 'string' && xmlIndex > -1 && xmlIndex < 5) {
-					emailError('Received XML instead of JSON: ' + data);
+		// 		// sometimes we get returned xml for some reason, this handles that
+		// 		if (typeof data == 'string' && xmlIndex > -1 && xmlIndex < 5) {
+		// 			if (errIndex > -1) runCall(method); // sometimes server errors, try a second time right away
+		// 			else emailError('Received XML instead of JSON: ' + data);
 
-				} else {
-					if (err) {
-						emailError('Error returned to requestWithEncoding callback: ' + err);
+		// 		} else {
+		// 			if (err) {
+		// 				emailError('Error returned to requestWithEncoding callback: ' + err);
 
-					} else {
-						// if data is a string, parse it
-						if (typeof data == 'string') data = JSON.parse(data);
+		// 			} else {
+		// 				// if data is a string, parse it
+		// 				if (typeof data == 'string') data = JSON.parse(data);
 
-						var vehicles = null;
+		// 				var vehicles = null;
 
-						// creates cleaned JSON for each row
-						processVehs(data, function (err, res) {
-							if (err) emailError('Error returned to processVehs callback: ' + res);
-							else vehicles = res;
-						});
+		// 				// creates cleaned JSON for each row
+		// 				processVehs(data, function (err, res) {
+		// 					if (err) emailError('Error returned to processVehs callback: ' + res);
+		// 					else vehicles = res;
+		// 				});
 
-						// convert each obj in array to a list/array
-						if (vehicles && vehicles.length > 0) {
-							vehicles = vehicles.map(function (veh) {
-								var keys = Object.keys(veh);
-								var res = []
-								keys.forEach(function (key) { res.push(veh[key]); });
-								return res;
-							}); 
+		// 				// convert each obj in array to a list/array
+		// 				if (vehicles && vehicles.length > 0) {
+		// 					vehicles = vehicles.map(function (veh) {
+		// 						var keys = Object.keys(veh);
+		// 						var res = []
+		// 						keys.forEach(function (key) { res.push(veh[key]); });
+		// 						return res;
+		// 					}); 
 
-							csvBundler(vehicles, function (err, msg) { 
-								if (err) { emailError(msg); }
-								else { console.log(msg); }
-							});
+		// 					csvBundler(vehicles, function (err, msg) { 
+		// 						if (err) { emailError(msg); }
+		// 						else { console.log('csvBundler: ' + msg); }
+		// 					});
 
-							archiveSituationFeed(data, function (err, msg) {
-								if (err) emailError('Error returned in archiveSituationFeed callback: ' + msg);
-							});
-						} else {
-							console.log('No vehicles trips parsed on call.');
-						}
-					}
-				}
-			} catch (e) {
-				emailError('Error during requestWithEncoding callback: ' + e);
-			}
-		})
+		// 					archiveSituationFeed(data, function (err, msg) {
+		// 						if (err) emailError('Error returned in archiveSituationFeed callback: ' + msg);
+		// 					});
+		// 				} else {
+		// 					console.log('No vehicles trips parsed on call.');
+		// 				}
+		// 			}
+		// 		}
+		// 	} catch (e) {
+		// 		emailError('Error during requestWithEncoding callback: ' + e);
+		// 	}
+		// })
 	};
 
 
@@ -145,7 +146,6 @@ function super_ops () {
 			url = 'http://api.prod.obanyc.com/api/siri/vehicle-monitoring.json?key=' + mtakey;
 
 	if (mtakey == undefined) {
-		if (mtakey == 'production')
 		console.log('Failed: Supply an MTA Bustime API key in order to run.');
 
 	} else {
@@ -177,24 +177,33 @@ function super_ops () {
 	};
 
 
-	// manage bundler operations every 10 min (600000 ms) do a check
+	// manage bundler operations every 100 min (6000000 ms) do a check
 	var lastBundleRun = null;
 	var bundler = function () {
 		setTimeout(function () { 
-			var dir = new Date(Date.now()).toISOString().split('T')[0];
-			var latest = new Date(Date.now());
-			var targHr = Number(latest.getUTCHours()) - 1;
-			if (lastBundleRun !== targHr) {
-				timeBundler(dir, targHr, function (err, errMsg) {
+			var latest = new Date(Date.now()),
+					y = latest.getUTCFullYear(),
+					m = latest.getUTCMonth() + 1, // months are zero-based in JS, go figure
+					d = latest.getUTCDay(); // days, too so already 1 behind
+
+			if (Number(m) < 10) m = String(0) + String(m);
+			if (Number(d) < 10) d = String(0) + String(d);
+			var dir = y + '-' + m + '-' + d;
+
+			if (lastBundleRun !== d) {
+				lastBundleRun = d;
+				timeBundler(dir, function (err, errMsg) {
 					if (err) { 
 						lastBundleRun = null;
 						emailError('Error returned in bundler callback: ' + errMsg); 
+					} else {
+						console.log('Successfully ran bundler for day/dir: ' + dir);
 					}
 				});
+			} else {
+				bundler();
 			}
-			lastBundleRun = targHr;
-			bundler();
-		}, 600000);
+		}, 100);
 	};
 	bundler();
 };

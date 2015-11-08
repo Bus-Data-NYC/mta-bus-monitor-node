@@ -3,7 +3,7 @@ var credentials = require('../credentials.js');
 var azure = require('azure-storage');
 var AZURECREDS = credentials.azure;
 
-function timeBundler (dir, hr, cb) {
+function timeBundler (dir, cb) {
 	// function global
 	var allFiles = [];
 	var ctr = { state: 0, goal: 0, repeat: 0 };
@@ -12,16 +12,11 @@ function timeBundler (dir, hr, cb) {
 		var bSvc = azure.createBlobService(AZURECREDS.temp.account, AZURECREDS.temp.key);
 		bSvc.listBlobsSegmented(dir, null, function(err, result) {
 			if (err) {
-				cb(true, 'Error listing blob for ' + dir + ', hour ' + hr + '. Error res: ' + result);
+				cb(true, 'Error listing blob for dir: ' + dir + '. Error res: ' + result);
 			} else {
-				var files = result.entries.map(function (ea) { 
-					return ea.name;
-				}).filter(function (ea) { 
-					return String(hr) == String(ea[0] + ea[1]);
-				});
+				var files = result.entries.map(function (ea) { return ea.name; }); console.log('tb: ', files.length);
 
 				var anyErrors = false;
-
 				files.forEach(function (file, i) {
 					// only do anything if anyErrors is false, otherwise just loop out
 					if (anyErrors == false) {
@@ -29,12 +24,12 @@ function timeBundler (dir, hr, cb) {
 							ctr.goal += 1;
 
 							if (err) {
-								anyErrors = true; // if errors occur with any file, send email, kill ops
-								cb(true, 'Error reading file: ' + file + ' in dir: ' + dir + '. Error: ', err);
+								// anyErrors = true; // if errors occur with any file, send email, kill ops
+								console.log(true, 'Failed to read file: ' + file + ' in dir: ' + dir + '. Error: ' + err + ' ' + data + ' ' + meta);
 
 							} else {
 								data = data.split('\r\n');
-								var cols = data.shift(); // drop first row, col headers
+								var cols = data.shift().split(','); // drop first row, col headers
 
 								var rws = [];
 								data.forEach(function (row) {
@@ -45,21 +40,21 @@ function timeBundler (dir, hr, cb) {
 								ctr.state += 1;
 								allFiles.push(rws);
 
-								// run parseRead() on last file
-								if (files.length - 1 == i) {
+								if (files.length - 1 == i) {console.log('tot errs', files.length, errors);
+									// check to make sure all files have been dl and processed
 									callOnReady(ctr, function (err, errMsg) {
 										if (err) {
 											cb(true, errMsg);
-										} else {
 
+										} else {
 											var uniques = {},
 													ur =[];
 
 											allFiles.forEach(function (rows, i1) {
 												rows.forEach(function (row, i2) {
 													try {
-														var sameHr = (row[0].split("T")[1].split(":")[0] == hr);
-														if (sameHr && row[0] !== undefined && row[7] !== undefined) {
+														// only add if same day
+														if ((row[0] !== undefined) && (row[7] !== undefined) && (row[0].split("T")[0] == dir)) {
 															var key = String(row[0] + row[7]);
 															if (uniques[key] == undefined) ur.push(row);
 															uniques[key] = true;
@@ -73,15 +68,14 @@ function timeBundler (dir, hr, cb) {
 											var cols = ['timestamp', 'vehicle_id', 'latitude', 'longitude', 'bearing', 'progress', 'service_date', 'trip_id', 'block_assigned', 'next_stop_id', 'dist_along_route', 'dist_from_stop'];
 											ur = cols + '\r\n' + ur.join('\r\n') + '\r\n';
 
-											var yr = dir.split('-')[0], 
-													fn = dir.split('-')[1] + '/' + dir.split('-')[2] + '/' + hr + '.csv';
+											var fn = d.split('-').join('/') +'.csv';
 
 											var aBlobSvc = azure.createBlobService(AZURECREDS.archive.account, AZURECREDS.archive.key);
-											aBlobSvc.createContainerIfNotExists(yr, {publicAccessLevel : 'container'}, function (err, result, response) {
+											aBlobSvc.createContainerIfNotExists('daily_archive', {publicAccessLevel : 'container'}, function (err, result, response) {
 												if (err) {
 													cb(true, 'Failed during arch. proc. createContainerIfNotExists() for container ' + yr + ' ' + response);
-												} else {
-													aBlobSvc.createBlockBlobFromText(yr, fn, ur, function (error, result, response){
+												} else {console.log('tb: ', result, response);
+													aBlobSvc.createBlockBlobFromText(fn, ur, function (error, result, response){
 														if (error) { 
 															cb(true, 'Failed during arch. proc. createBlockBlobFromText() for container: ' + yr + ', file: ' + fn + ': ' + error); 
 														} else { 
