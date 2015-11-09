@@ -184,7 +184,7 @@ function super_ops () {
 			var latest = new Date(Date.now()),
 					y = latest.getUTCFullYear(),
 					m = latest.getUTCMonth() + 1, // months are zero-based in JS, go figure
-					d = latest.getUTCDay(); // days, too so already 1 behind
+					d = latest.getUTCDate(); // days, too so already 1 behind
 
 			if (Number(m) < 10) m = String(0) + String(m);
 			if (Number(d) < 10) d = String(0) + String(d);

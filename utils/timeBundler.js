@@ -12,7 +12,7 @@ function timeBundler (dir, cb) {
 		var bSvc = azure.createBlobService(AZURECREDS.temp.account, AZURECREDS.temp.key);
 		bSvc.listBlobsSegmented(dir, null, function(err, result) {
 			if (err) {
-				cb(true, 'Error listing blob for dir: ' + dir + '. Error res: ' + result);
+				cb(true, 'Error listing blob for dir: ' + dir + '. Error res: ' + err + ' ' + result);
 			} else {
 				var files = result.entries.map(function (ea) { return ea.name; }); console.log('tb: ', files.length);
 
@@ -94,7 +94,7 @@ function timeBundler (dir, cb) {
 			}
 		});
 	} catch (e) {
-		cb(true, 'Error occurred during timeBundler operation: ' + e);
+		cb(true, 'timeBundler operation error: ' + e);
 	}
 
 	function callOnReady (ctr, cb) {
