@@ -159,17 +159,12 @@ function super_ops () {
 		console.log('Failed: Supply an MTA Bustime API key in order to run.');
 
 	} else {
-		var job = (process.argv[2] == undefined || process.argv[2] == 'scrape') ? 'scrape' : 'archive',
+		var job = (process.argv[2] == undefined || process.argv[2] == 'archive') ? 'archive' : 'scrape',
 				method = ((process.argv[3] == 'default') || (process.argv[3] == 'production')) ? 1 : Number(process.argv[3]),
 				researchLength = ((process.argv[4] !== undefined) && (isNaN(Number(process.argv[4])) == false)) ? Number(process.argv[4]) : ((process.argv[4] == 'production') ? 0 : 0),
 				intervalGlobal = null;
 
-		if (isNaN(method) || method < 0 || method > 3) {
-			method = 1;
-			console.log('No method provided; using default Method #1.');
-		} else {
-			console.log('Method defined as ', method);
-		}
+		if (isNaN(method) || method < 0 || method > 3) { method = 1; }
 
 		// Method 0: run this every 30 seconds
 		// Method 1: run 30 seconds after first response from Bustime API
@@ -180,11 +175,13 @@ function super_ops () {
 			if (researchLength > 0)
 				setTimeout(function () { kill(); }, researchLength);
 		} else if ((method == 1 || method == 2 || method == 3) && (job == 'scrape')) {
+			console.log('Running method ' + method + 'in scrape mode.');
 			intervalGlobal = true;
 			runCall(method);
 			if (researchLength > 0)
 				setTimeout(function () { kill(); }, researchLength);
 		} else if (job == 'archive') {
+			console.log('Running application in archive mode.');
 			initializeSQLite(); // initialize sqlite3 db
 			bundler();
 			if (researchLength > 0)
