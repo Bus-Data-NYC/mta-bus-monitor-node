@@ -78,79 +78,89 @@ function super_ops () {
 
 
 	function runCall (method) {
-		// requestWithEncoding(url, method, function(err, data) {
-		// 	try {
-		// 		var t = new Date(Date.now()).toISOString().split('T'),
-		// 				xmlIndex = data.indexOf('<?xml'),
-		// 				errIndex = data.indexOf('Server Error');
+		requestWithEncoding(url, method, function(err, data) {
+			try {
+				var t = new Date(Date.now()).toISOString().split('T'),
+						xmlIndex = data.indexOf('<?xml'),
+						errIndex = data.indexOf('Server Error');
 
-		// 		// sometimes we get returned xml for some reason, this handles that
-		// 		if (typeof data == 'string' && xmlIndex > -1 && xmlIndex < 5) {
-		// 			if (errIndex > -1) runCall(method); // sometimes server errors, try a second time right away
-		// 			else emailError('Received XML instead of JSON: ' + data);
+				// sometimes we get returned xml for some reason, this handles that
+				if (typeof data == 'string' && xmlIndex > -1 && xmlIndex < 5) {
+					if (errIndex > -1) runCall(method); // sometimes server errors, try a second time right away
+					else emailError('Received XML instead of JSON: ' + data);
 
-		// 		} else {
-		// 			if (err) {
-		// 				emailError('Error returned to requestWithEncoding callback: ' + err);
+				} else {
+					if (err) {
+						emailError('Error returned to requestWithEncoding callback: ' + err);
 
-		// 			} else {
-		// 				// if data is a string, parse it
-		// 				if (typeof data == 'string') data = JSON.parse(data);
+					} else {
+						// if data is a string, parse it
+						if (typeof data == 'string') data = JSON.parse(data);
 
-		// 				var vehicles = null;
+						var vehicles = null;
 
-		// 				// creates cleaned JSON for each row
-		// 				processVehs(data, function (err, res) {
-		// 					if (err) emailError('Error returned to processVehs callback: ' + res);
-		// 					else vehicles = res;
-		// 				});
+						// creates cleaned JSON for each row
+						processVehs(data, function (err, res) {
+							if (err) emailError('Error returned to processVehs callback: ' + res);
+							else vehicles = res;
+						});
 
-		// 				// convert each obj in array to a list/array
-		// 				if (vehicles && vehicles.length > 0) {
-		// 					vehicles = vehicles.map(function (veh) {
-		// 						var keys = Object.keys(veh);
-		// 						var res = []
-		// 						keys.forEach(function (key) { res.push(veh[key]); });
-		// 						return res;
-		// 					}); 
+						// convert each obj in array to a list/array
+						if (vehicles && vehicles.length > 0) {
+							vehicles = vehicles.map(function (veh) {
+								var keys = Object.keys(veh);
+								var res = []
+								keys.forEach(function (key) { res.push(veh[key]); });
+								return res;
+							}); 
 
-		// 					csvBundler(vehicles, function (err, msg) { 
-		// 						if (err) { emailError(msg); }
-		// 						else { console.log('csvBundler: ' + msg); }
-		// 					});
+							csvBundler(vehicles, function (err, msg) { 
+								if (err) { emailError(msg); }
+								else { console.log('csvBundler: ' + msg); }
+							});
 
-		// 					archiveSituationFeed(data, function (err, msg) {
-		// 						if (err) emailError('Error returned in archiveSituationFeed callback: ' + msg);
-		// 					});
-		// 				} else {
-		// 					console.log('No vehicles trips parsed on call.');
-		// 				}
-		// 			}
-		// 		}
-		// 	} catch (e) {
-		// 		emailError('Error during requestWithEncoding callback: ' + e);
-		// 	}
-		// })
+							archiveSituationFeed(data, function (err, msg) {
+								if (err) emailError('Error returned in archiveSituationFeed callback: ' + msg);
+							});
+						} else {
+							console.log('No vehicles trips parsed on call.');
+						}
+					}
+				}
+			} catch (e) {
+				emailError('Error during requestWithEncoding callback: ' + e);
+			}
+		})
 	};
 
 
 	function kill () {
-		if (intervalGlobal == true) intervalGlobal = false;
-		else clearInterval(intervalGlobal);
 		console.log('Stopping calls, wrapping up.');
+		if (intervalGlobal == true) {
+			intervalGlobal = false;
+		} else {
+			if (job && job == 'scrape') {
+				clearInterval(intervalGlobal);
+			} else if (job && job == 'archive') {
+				lastBundleRun = 'STOP';
+			} else {
+				console.log('Error occured during kill cycle.');
+			}
+		}
 	};
 
 
 	// operation to determine how to run repeated api calls
-	var mtakey = (process.argv[4] !== undefined) && (process.argv[4] !== 'default') ? process.argv[4] : credentials.mtakey,
+	var mtakey = (process.argv[5] !== undefined) && (process.argv[5] !== 'default') ? process.argv[5] : credentials.mtakey,
 			url = 'http://api.prod.obanyc.com/api/siri/vehicle-monitoring.json?key=' + mtakey;
 
 	if (mtakey == undefined) {
 		console.log('Failed: Supply an MTA Bustime API key in order to run.');
 
 	} else {
-		var method = ((process.argv[2] == 'default') || (process.argv[2] == 'production')) ? 1 : Number(process.argv[2]),
-				researchLength = ((process.argv[3] !== undefined) && (isNaN(Number(process.argv[3])) == false)) ? Number(process.argv[3]) : ((process.argv[3] == 'production') ? 0 : 0),
+		var job = (process.argv[2] == undefined || process.argv[2] == 'scrape') ? 'scrape' : 'archive',
+				method = ((process.argv[3] == 'default') || (process.argv[3] == 'production')) ? 1 : Number(process.argv[3]),
+				researchLength = ((process.argv[4] !== undefined) && (isNaN(Number(process.argv[4])) == false)) ? Number(process.argv[4]) : ((process.argv[4] == 'production') ? 0 : 0),
 				intervalGlobal = null;
 
 		if (isNaN(method) || method < 0 || method > 3) {
@@ -168,9 +178,14 @@ function super_ops () {
 			intervalGlobal = setInterval(function () { runCall(method); }, 30000);
 			if (researchLength > 0)
 				setTimeout(function () { kill(); }, researchLength);
-		} else if (method == 1 || method == 2 || method == 3) {
+		} else if ((method == 1 || method == 2 || method == 3) && (job == 'scrape')) {
 			intervalGlobal = true;
 			runCall(method);
+			if (researchLength > 0)
+				setTimeout(function () { kill(); }, researchLength);
+		} else if (job == 'archive') {
+			// just run bundler at set intervals
+			bundler();
 			if (researchLength > 0)
 				setTimeout(function () { kill(); }, researchLength);
 		}
@@ -179,7 +194,7 @@ function super_ops () {
 
 	// manage bundler operations every 100 min (6000000 ms) do a check
 	var lastBundleRun = null;
-	var bundler = function () {
+	function bundler () {
 		setTimeout(function () { 
 			var latest = new Date(Date.now()),
 					y = latest.getUTCFullYear(),
@@ -201,11 +216,10 @@ function super_ops () {
 					}
 				});
 			} else {
-				bundler();
+				if (lastBundleRun !== 'STOP') { bundler(); }
 			}
 		}, 100);
 	};
-	bundler();
 };
 
 
