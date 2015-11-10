@@ -193,9 +193,11 @@ function super_ops () {
 
 
 	// manage bundler operations every 100 min (6000000 ms) do a check
-	var lastBundleRun = null;
+	var lastBundleRun = null,
+			bundlerRunning = false;
 	function bundler () {
 		setTimeout(function () { 
+			bundlerRunning = true;
 			var latest = new Date(Date.now()),
 					y = latest.getUTCFullYear(),
 					m = latest.getUTCMonth() + 1, // months are zero-based in JS, go figure
@@ -207,7 +209,8 @@ function super_ops () {
 
 			if (lastBundleRun !== d) {
 				lastBundleRun = d;
-				timeBundler(dir, function (err, errMsg) {
+				timeBundler(dir, function (err, errMsg, errCount) {
+					bundlerRunning = false;
 					if (err) { 
 						lastBundleRun = null;
 						emailError('Error returned in bundler callback: ' + errMsg); 
@@ -215,8 +218,8 @@ function super_ops () {
 						console.log('Successfully ran bundler for day/dir: ' + dir);
 					}
 				});
-			} else {
-				if (lastBundleRun !== 'STOP') { bundler(); }
+			} else if (lastBundleRun !== 'STOP') {
+				bundler();
 			}
 		}, 100);
 	};
