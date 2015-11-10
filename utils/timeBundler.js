@@ -1,9 +1,14 @@
-var credentials = require('./credentials.js');
+var sqlite3 = require('sqlite3').verbose();
+var SQLrefreshTable = require('./SQLrefreshTable').SQLrefreshTable;
+
+var credentials = require('../credentials.js');
 
 var azure = require('azure-storage');
 var AZURECREDS = credentials.azure;
 
 function timeBundler (dir, cb) {
+	SQLrefreshTable();
+	var db = new sqlite3.Database('archive.db');
 
 	var globalErrors = 0,
 			ALLDONE = false,
@@ -130,6 +135,24 @@ function timeBundler (dir, cb) {
 			cb(true, 'Error during processData in timeBundler: ' + e);
 		}
 	};
+
+	function sqlPrep () {
+		// check if the table exists already and, if so, clear it
+		var query1 = "SELECT count(type) as count FROM sqlite_master WHERE type='table' AND name='temp';";
+		db.get(query1, function (err, row) {
+			if (err ) {
+				cb(true, 'Check for temp table resulted in error: ' + err);
+			} else {
+				try {
+					if (row.hasOwnProperty('count') && Number(row.count) > 0) {
+						db.run('DROP TABLE temp');
+					}
+				} catch (e) {
+					cb(true, 'Error during parse of row, count: ' + err);
+				}
+			}
+		});
+	}
 
 	// hacky solution... keeps process from timing out
 	(function wait () {

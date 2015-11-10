@@ -14,7 +14,8 @@ function super_ops () {
 			archiveSituationFeed = require('./utils/archiveSituationFeed.js').archiveSituationFeed,
 			processVehs = require('./utils/processVehs.js').processVehs,
 			csvBundler = require('./utils/csvBundler.js').csvBundler,
-			timeBundler = require('./utils/timeBundler.js').timeBundler;
+			timeBundler = require('./utils/timeBundler.js').timeBundler,
+			initializeSQLite = require('./utils/initializeSQLite.js').initializeSQLite;
 			
 
 
@@ -184,7 +185,7 @@ function super_ops () {
 			if (researchLength > 0)
 				setTimeout(function () { kill(); }, researchLength);
 		} else if (job == 'archive') {
-			// just run bundler at set intervals
+			initializeSQLite(); // initialize sqlite3 db
 			bundler();
 			if (researchLength > 0)
 				setTimeout(function () { kill(); }, researchLength);
@@ -221,7 +222,7 @@ function super_ops () {
 			} else if (lastBundleRun !== 'STOP') {
 				bundler();
 			}
-		}, 100);
+		}, 2000);
 	};
 };
 
