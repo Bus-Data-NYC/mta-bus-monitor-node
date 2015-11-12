@@ -75,29 +75,26 @@ function SQLnewRows (rows, cb) {
 				stmt.run(rows[i], function (err) {
 					if (err) { errors.push(err); }
 					numDone += 1;
-					onDone();
+					if (numDone == rows.length) {
+						try {
+							if (db.open) db.close();
+						} catch (e) {
+							console.log('db.close() failed: ' + e);
+						}
+						console.log('done waiting..', errors);
+						if (errors.length > 0) {
+							var errString = errors.map(function (ea) { return JSON.stringify(ea); }).toString();
+							cb(true, errString);
+						} else {
+							cb(false);
+						}
+					}
 				});
 			}
 			stmt.finalize();
 		});
 
-		function onDone () {
-			if (numDone == rows.length) {
-				try {
-					if (db.open) db.close();
-				} catch (e) {
-					console.log('db.close() failed: ' + e);
-				}
-				if (errors.length > 0) {
-					var errString = errors.map(function (ea) { return JSON.stringify(ea); }).toString();
-					cb(true, errString);
-				} else {
-					cb(false);
-				}
-			} else {
-				setTimeout(onDone, 2000)
-			}
-		};
+
 	} catch (e) {
 		console.log('Caught error.');
 		cb(true, 'Unknown error occured during SQLnewRows: ' + e);
