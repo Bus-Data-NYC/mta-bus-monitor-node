@@ -15,7 +15,7 @@ function super_ops () {
 			processVehs = require('./utils/processVehs.js').processVehs,
 			csvBundler = require('./utils/csvBundler.js').csvBundler,
 			timeBundler = require('./utils/timeBundler.js').timeBundler,
-			initializeSQLite = require('./utils/initializeSQLite.js').initializeSQLite;
+			initializeSQLite = require('./utils/timeBundlerSQLib.js').initializeSQLite;
 			
 
 

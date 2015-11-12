@@ -1,5 +1,7 @@
 var sqlite3 = require('sqlite3').verbose();
-var SQLrefreshTable = require('./SQLrefreshTable').SQLrefreshTable;
+
+var SQLrefreshTable = require('./timeBundlerSQLib').SQLrefreshTable;
+var SQLnewRows = require('./timeBundlerSQLib').SQLnewRows;
 
 var credentials = require('../credentials.js');
 
@@ -8,12 +10,11 @@ var AZURECREDS = credentials.azure;
 
 function timeBundler (dir, cb) {
 	SQLrefreshTable();
-	var db = new sqlite3.Database('archive.db');
 
 	var globalErrors = 0,
 			ALLDONE = false,
-			uniques = {},
-			ur =[];
+			SQLnewRows_QUEUE = [];
+			SQLnewRows_RUNNING = false;
 
 	var bSvc = azure.createBlobService(AZURECREDS.temp.account, AZURECREDS.temp.key);
 
@@ -23,6 +24,10 @@ function timeBundler (dir, cb) {
 				cb(true, 'Failed during listBlobsSegmented callback.');
 			} else {
 				if (res.hasOwnProperty('entries') && res.entries.hasOwnProperty('length') && res.entries.length > 250) {
+
+					///!!!!! BREAK DOWN TO DEMO SIZE
+					res.entries = res.entries.slice(0, 10);
+
 					var a = res.entries.map(function (ea) { return ea.name; }),
 							b = [];
 
@@ -32,6 +37,7 @@ function timeBundler (dir, cb) {
 					// break up calls by > 1 second delays
 					var globIndex = 0;
 					blobReadLoop();
+					addSQLRowsFunc();
 
 					function blobReadLoop () {
 						console.log('Running operation, globIndex = ' + globIndex);
@@ -42,15 +48,48 @@ function timeBundler (dir, cb) {
 						} else {
 							var filesCompleted = 0;
 
-							for (var i = 0; i < files.length; i++) {
-								var f = files[i];
-								getBlobFile(dir, f, 0);
+							// for (var i = 0; i < files.length; i++) {
 
-								function getBlobFile (dir, f, errors) {
-									var isLast = false;
-									if (f == files[files.length - 1]) {
-										isLast = true;
+								runGetWhenDone(0);
+
+								function runGetWhenDone (fileIndex) {
+									if (SQLnewRows_QUEUE.length < 5000) {
+										var f = files[fileIndex];
+console.log('getting file ' + f);
+										getBlobFile(dir, f, 0, function () {
+											fileIndex = fileIndex + 1;
+											if (fileIndex < files.length) {
+												runGetWhenDone(fileIndex);
+											} else {
+												globIndex = globIndex + 1;
+												checkAllFilesComplete();
+
+												function checkAllFilesComplete () {
+													if (filesCompleted >= files.length) {
+														setTimeout(function () {
+															if (globIndex < b.length) {
+																blobReadLoop();
+															} else {
+																ALLDONE = true;
+																console.log('DONE obtaining all data from dir ' + dir + '. Errors: ' + globalErrors);
+															}
+														}, 2000);
+													} else {
+														console.log('Waiting for current batch downloads to finish. (' + filesCompleted + ' out of ' + files.length + ')');
+														setTimeout(checkAllFilesComplete, 4000);
+													}
+												}
+											}
+										});
+									} else {
+										setTimeout(function () { runGetWhenDone(fileIndex); }, 10000);
 									}
+								};
+
+								function getBlobFile (dir, f, errors, getNext) {
+									var isLast = false;
+									if (f == files[files.length - 1]) { isLast = true; }
+
 									bSvc.getBlobToText(dir, f, function(err, data, meta) {
 										if (err) {
 											console.log('Error on getBlobToText: ' + err + ' ' + data + ' ' + meta);
@@ -64,39 +103,19 @@ function timeBundler (dir, cb) {
 											} else {
 												globalErrors += 1;
 												filesCompleted += 1;
+												getNext(); // move on to next file
 											}
 
 										} else {
-											console.log(process.memoryUsage());
 											filesCompleted += 1;
-											processData(data);
-										}
-
-										// run next chunk if last in array
-										if (isLast) {
-											globIndex = globIndex + 1;
-											checkAllFilesComplete();
-
-											function checkAllFilesComplete () {
-												if (filesCompleted >= files.length) {
-													setTimeout(function () {
-														if (globIndex < b.length) {
-															blobReadLoop();
-														} else {
-															ALLDONE = true;
-															console.log('DONE obtaining all data from dir ' + dir + '. Errors: ' + globalErrors);
-															console.log('Unique rows: ' + Object.keys(uniques).length);
-														}
-													}, 2000);
-												} else {
-													console.log('Waiting for current batch downloads to finish. (' + filesCompleted + ' out of ' + files.length + ')');
-													setTimeout(checkAllFilesComplete, 4000);
-												}
-											}
+											processData(data, function (error, errorMsg) {
+												if (error) { console.log('FAILED ON PROCESS DATA: ' + errorMsg); }
+												getNext(); // either way, run it
+											});
 										}
 									});
 								};
-							}
+							// }
 						}
 					};
 				}
@@ -106,7 +125,7 @@ function timeBundler (dir, cb) {
 		cb(true, 'Unknown error during listBlobsSegmented operation: ' + e);
 	}
 
-	function processData (data) {
+	function processData (data, cb) {
 		try {
 			data = data.split('\r\n');
 			var cols = data.shift().split(','); // drop first row, col headers
@@ -117,47 +136,40 @@ function timeBundler (dir, cb) {
 				if (sp.length == cols.length) rows.push(sp); // only add if its a complete row
 			});
 
-			rows.forEach(function (row) {
-				try {
-					// only add if same day
-					if ((row[0] !== undefined) && (row[7] !== undefined) && (row[0].split("T")[0] == dir)) {
-						var key = String(row[0] + row[7]);
-						if (uniques[key] == undefined) {
-							ur.push(row);
-						}
-						uniques[key] = true;
-					}
-				} catch (e) {
-					console.log('Error when parsing trip_id: ' + row[7]);
-				}
-			});			
+			rows = rows.filter(function (row) {
+				var hasBoth = ((row[0] !== undefined) && (row[7] !== undefined));
+				var sameAsDir = (row[0].split("T")[0] == dir);
+				return (hasBoth && sameAsDir);
+			});
+
+			// add new rows to the queue of tasks to add to db
+			rows.forEach(function (row) { SQLnewRows_QUEUE.push(row); });
 		} catch (e) {
 			cb(true, 'Error during processData in timeBundler: ' + e);
 		}
 	};
 
-	function sqlPrep () {
-		// check if the table exists already and, if so, clear it
-		var query1 = "SELECT count(type) as count FROM sqlite_master WHERE type='table' AND name='temp';";
-		db.get(query1, function (err, row) {
-			if (err ) {
-				cb(true, 'Check for temp table resulted in error: ' + err);
+	function addSQLRowsFunc () {
+		if (!ALLDONE) {
+			if (SQLnewRows_RUNNING || SQLnewRows_QUEUE.length == 0) {
+				// if process currently underway, wait and try again later
+				// console.log('Waiting for current SQLnewRows operation to complete...');
+				setTimeout(addSQLRowsFunc, 4000)
 			} else {
-				try {
-					if (row.hasOwnProperty('count') && Number(row.count) > 0) {
-						db.run('DROP TABLE temp');
-					}
-				} catch (e) {
-					cb(true, 'Error during parse of row, count: ' + err);
-				}
+				SQLnewRows_RUNNING = true;
+				console.log('RUNNING new SQLnewRows_RUNNING, w/ current length: ', SQLnewRows_QUEUE.length);
+				// pop off first set of rows to process
+				var r = SQLnewRows_QUEUE.splice(0, 100);
+				SQLnewRows(r, function (error, errorMsg) {
+					if (error) cb(true, errorMsg);
+					SQLnewRows_RUNNING = false;
+				});
 			}
-		});
-	}
+		}
+	};
 
 	// hacky solution... keeps process from timing out
-	(function wait () {
-	   if (!ALLDONE) setTimeout(wait, 1000);
-	})();
+	(function wait () {if (!ALLDONE) setTimeout(wait, 1000);})();
 };
 
 module.exports = {
