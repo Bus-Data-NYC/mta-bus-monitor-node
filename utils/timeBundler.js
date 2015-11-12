@@ -18,7 +18,7 @@ function timeBundler (dir, cb) {
 
 	var bSvc = azure.createBlobService(AZURECREDS.temp.account, AZURECREDS.temp.key);
 
-	try {
+	try {dir = '2015-11-11'; ///!!!!!!!!!!!!!
 		bSvc.listBlobsSegmented(dir, null, function(err, res) {
 			if (err) {
 				cb(true, 'Failed during listBlobsSegmented callback.');
@@ -144,6 +144,7 @@ console.log('getting file ' + f);
 
 			// add new rows to the queue of tasks to add to db
 			rows.forEach(function (row) { SQLnewRows_QUEUE.push(row); });
+
 		} catch (e) {
 			cb(true, 'Error during processData in timeBundler: ' + e);
 		}

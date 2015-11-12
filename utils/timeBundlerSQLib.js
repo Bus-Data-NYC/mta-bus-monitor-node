@@ -83,7 +83,11 @@ function SQLnewRows (rows, cb) {
 
 		function onDone () {
 			if (numDone == rows.length) {
-				db.close();
+				try {
+					if (db.open) db.close();
+				} catch (e) {
+					console.log('db.close() failed: ' + e);
+				}
 				if (errors.length > 0) {
 					var errString = errors.map(function (ea) { return JSON.stringify(ea); }).toString();
 					cb(true, errString);
