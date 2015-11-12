@@ -2,6 +2,7 @@ var sqlite3 = require('sqlite3').verbose();
 
 var SQLrefreshTable = require('./timeBundlerSQLib').SQLrefreshTable;
 var SQLnewRows = require('./timeBundlerSQLib').SQLnewRows;
+var SQLcleanRows = require('./timeBundlerSQLib').SQLcleanRows;
 
 var credentials = require('../credentials.js');
 
@@ -11,163 +12,107 @@ var AZURECREDS = credentials.azure;
 function timeBundler (dir, cb) {
 	SQLrefreshTable();
 
-	var globalErrors = 0,
-			ALLDONE = false,
-			SQLnewRows_QUEUE = [];
-			SQLnewRows_RUNNING = false;
+	var globalErrors = [],
+			ALLDONE = false;
 
 	var bSvc = azure.createBlobService(AZURECREDS.temp.account, AZURECREDS.temp.key);
 
-	try {dir = '2015-11-11'; ///!!!!!!!!!!!!!
+	try {
 		bSvc.listBlobsSegmented(dir, null, function(err, res) {
 			if (err) {
 				cb(true, 'Failed during listBlobsSegmented callback.');
 			} else {
-				if (res.hasOwnProperty('entries') && res.entries.hasOwnProperty('length') && res.entries.length > 250) {
+				if (res.hasOwnProperty('entries') && res.entries.hasOwnProperty('length') && res.entries.length > 0) {
 
-					///!!!!! BREAK DOWN TO DEMO SIZE
-					res.entries = res.entries.slice(0, 10);
+					var files = res.entries.map(function (ea) { return ea.name; });
 
-					var a = res.entries.map(function (ea) { return ea.name; }),
-							b = [];
+					getAndProcessFile(0);
 
-					// break large arrays into blocks due to 500 call per second limit
-					while (a.length) { b.push(a.splice(0,100)); }
+					function getAndProcessFile (fileIndex) {
+						console.log('Running getAndProcessFile on file ' + files[fileIndex] + ' (' + fileIndex + '/' + (files.length - 1) + ')');
 
-					// break up calls by > 1 second delays
-					var globIndex = 0;
-					blobReadLoop();
-					addSQLRowsFunc();
+						if (fileIndex >= (files.length - 1)) {
+							// end game
+							ALLDONE = true;
+							console.log('DONE');
 
-					function blobReadLoop () {
-						console.log('Running operation, globIndex = ' + globIndex);
+							SQLcleanRows(function (error, errorMessage) {
+								if (error) {
+									cb(true, 'Error during SQLcleanRows in getAndProcessFile: ' + errorMessage);
+								} else {
+									var archiveSvc = azure.createBlobService(AZURECREDS.archive.account, AZURECREDS.archive.key);
+									
+								}
+							});
 
-						var files = b[globIndex];
-						if (files == undefined) {
-							console.log(files);
+
 						} else {
-							var filesCompleted = 0;
+							var file = files[fileIndex];
+							getFile(dir, file, 0, function (err, data) {
+								if (err) {
+									globalErrors.push('Failed to getFile ' + file + '.');
+									getAndProcessFile(fileIndex + 1);
+								} else {
+									try {
+										data = data.split('\r\n');
+										var cols = data.shift().split(','); // drop first row, col headers
 
-							// for (var i = 0; i < files.length; i++) {
-
-								runGetWhenDone(0);
-
-								function runGetWhenDone (fileIndex) {
-									if (SQLnewRows_QUEUE.length < 5000) {
-										var f = files[fileIndex];
-console.log('getting file ' + f);
-										getBlobFile(dir, f, 0, function () {
-											fileIndex = fileIndex + 1;
-											if (fileIndex < files.length) {
-												runGetWhenDone(fileIndex);
-											} else {
-												globIndex = globIndex + 1;
-												checkAllFilesComplete();
-
-												function checkAllFilesComplete () {
-													if (filesCompleted >= files.length) {
-														setTimeout(function () {
-															if (globIndex < b.length) {
-																blobReadLoop();
-															} else {
-																ALLDONE = true;
-																console.log('DONE obtaining all data from dir ' + dir + '. Errors: ' + globalErrors);
-															}
-														}, 2000);
-													} else {
-														console.log('Waiting for current batch downloads to finish. (' + filesCompleted + ' out of ' + files.length + ')');
-														setTimeout(checkAllFilesComplete, 4000);
-													}
+										var rows = [];
+										data.forEach(function (row) {
+											var row = row.split(',');
+											// only add if its a complete row
+											if (row.length == cols.length) {
+												var hasBoth = ((row[0] !== undefined) && (row[7] !== undefined));
+												var sameAsDir = (row[0].split("T")[0] == dir);
+												if (hasBoth && sameAsDir) {
+													rows.push(row);
 												}
 											}
 										});
-									} else {
-										setTimeout(function () { runGetWhenDone(fileIndex); }, 10000);
-									}
-								};
 
-								function getBlobFile (dir, f, errors, getNext) {
-									var isLast = false;
-									if (f == files[files.length - 1]) { isLast = true; }
-
-									bSvc.getBlobToText(dir, f, function(err, data, meta) {
-										if (err) {
-											console.log('Error on getBlobToText: ' + err + ' ' + data + ' ' + meta);
-
-											// try rerunning a few times if it fails
-											if (errors < 5) {
-												errors += 1;
-												getBlobFile(dir, f, errors);
-
-											// if no luck then let's register this as an error
-											} else {
-												globalErrors += 1;
-												filesCompleted += 1;
-												getNext(); // move on to next file
+										SQLnewRows(rows, function (error, errorMessage) {
+											if (error) {
+												globalErrors.push('Failed to add rows to SQL DB from ' + file + ': ' + errorMessage);
 											}
+											getAndProcessFile(fileIndex + 1);
+										});
 
+									} catch (e) {
+										globalErrors.push('Unknown error caught during parse of data from ' + file + ' blob.');
+									}
+								}
+							});
+
+							function getFile (dir, file, errors, cb) {
+								bSvc.getBlobToText(dir, file, function(err, data, meta) {
+									if (err) {
+										console.log('Error on getBlobToText: ' + err + ' ' + data + ' ' + meta);
+
+										// try rerunning after a delay a few times if it fails
+										if (errors < 5) {
+											errors += 1;
+											setTimeout(function () { getFile(dir, file, errors, cb); }, 500)
+
+										// if no luck then let's register this as an error
 										} else {
-											filesCompleted += 1;
-											processData(data, function (error, errorMsg) {
-												if (error) { console.log('FAILED ON PROCESS DATA: ' + errorMsg); }
-												getNext(); // either way, run it
-											});
+											cb(true, null);
 										}
-									});
-								};
-							// }
+
+									} else {
+										cb(false, data);
+									}
+								});
+							};
 						}
 					};
+				} else {
+					console.log('No content');
 				}
 			}
 		});
 	} catch (e) {
 		cb(true, 'Unknown error during listBlobsSegmented operation: ' + e);
 	}
-
-	function processData (data, cb) {
-		try {
-			data = data.split('\r\n');
-			var cols = data.shift().split(','); // drop first row, col headers
-
-			var rows = [];
-			data.forEach(function (row) {
-				var sp = row.split(',');
-				if (sp.length == cols.length) rows.push(sp); // only add if its a complete row
-			});
-
-			rows = rows.filter(function (row) {
-				var hasBoth = ((row[0] !== undefined) && (row[7] !== undefined));
-				var sameAsDir = (row[0].split("T")[0] == dir);
-				return (hasBoth && sameAsDir);
-			});
-
-			// add new rows to the queue of tasks to add to db
-			rows.forEach(function (row) { SQLnewRows_QUEUE.push(row); });
-
-		} catch (e) {
-			cb(true, 'Error during processData in timeBundler: ' + e);
-		}
-	};
-
-	function addSQLRowsFunc () {
-		if (!ALLDONE) {
-			if (SQLnewRows_RUNNING || SQLnewRows_QUEUE.length == 0) {
-				// if process currently underway, wait and try again later
-				// console.log('Waiting for current SQLnewRows operation to complete...');
-				setTimeout(addSQLRowsFunc, 4000)
-			} else {
-				SQLnewRows_RUNNING = true;
-				console.log('RUNNING new SQLnewRows_RUNNING, w/ current length: ', SQLnewRows_QUEUE.length);
-				// pop off first set of rows to process
-				var r = SQLnewRows_QUEUE.splice(0, 100);
-				SQLnewRows(r, function (error, errorMsg) {
-					if (error) cb(true, errorMsg);
-					SQLnewRows_RUNNING = false;
-				});
-			}
-		}
-	};
 
 	// hacky solution... keeps process from timing out
 	(function wait () {if (!ALLDONE) setTimeout(wait, 1000);})();
