@@ -25,7 +25,7 @@ function timeBundler (dir, cb) {
 			} else {
 				if (res.hasOwnProperty('entries') && res.entries.hasOwnProperty('length') && res.entries.length > 0) {
 
-					var files = res.entries.map(function (ea) { return ea.name; });
+					var files = res.entries.map(function (ea) { return ea.name; }).splice(0, 5);
 
 					getAndProcessFile(0);
 
@@ -34,7 +34,7 @@ function timeBundler (dir, cb) {
 
 						if (fileIndex >= (files.length - 1)) {
 							ALLDONE = true;
-							
+
 							SQLcleanRows(function (error, res) {
 								if (error) {
 									cb(true, 'Error during SQLcleanRows in getAndProcessFile: ' + res);
@@ -49,10 +49,9 @@ function timeBundler (dir, cb) {
 
 									archiveSvc.createBlockBlobFromStream(container, blobName, inStream, inLength, function (error, result, response) {
 							      if (error) {
-							      	console.log(true, 'Could not upload compressed file stream: ' + error);
+							      	cb(true, 'Could not upload compressed file stream: ' + error);
 							      } else {
-							      	console.log('DONE: ', response, result);
-							        cb(false, {all: res.all, cleaned: res.cleaned});
+							        cb(false, res);
 							      }
 									});
 								}

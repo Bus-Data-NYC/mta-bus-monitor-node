@@ -207,24 +207,28 @@ function super_ops () {
 
 			if (lastBundleRun !== d) {
 				lastBundleRun = d;
-				timeBundler(dir, function (err, errMsg, errCount) {
+				timeBundler(dir, function (err, res) {
 					bundlerRunning = false;
 					if (err) { 
 						lastBundleRun = null;
-						emailError('Error returned in bundler callback: ' + errMsg); 
+						emailError('Error returned in bundler callback: ' + res); 
 					} else {
-						console.log('Successfully ran bundler for day/dir: ' + dir);
+						console.log('Archive complete for: ' + dir + '. Cleaned ' + res.all +
+												' files down to ' + res.cleaned + ', at ' + (res.size/1000000).toFixed(2) + ' mb. (' + 
+												(100*res.cleaned/res.all).toFixed(2) + '% efficiency.)');
 					}
 				});
 			} else if (lastBundleRun !== 'STOP') {
 				bundler();
 			}
-		}, 2000);
+		}, 6000);
 	};
 };
 
 
-
+(function wait () {
+	console.log(process.memoryUsage());
+	if (true) setTimeout(wait, 100000);})();
 
 // onload logic
 // application run directly; start app server

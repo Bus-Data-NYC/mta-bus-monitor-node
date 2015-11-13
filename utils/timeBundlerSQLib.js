@@ -8,18 +8,18 @@ function initializeSQLite (argument) {
 	if (!exists) { fs.openSync(file, 'w'); }
 
 	// check if the table exists already and, if so, clear it
-	var query1 = "SELECT count(type) as count FROM sqlite_master WHERE type='table' AND name='temp'";
+	var query = "SELECT count(type) as count FROM sqlite_master WHERE type='table' AND name='temp'";
 	var db = new sqlite3.Database(file);
-	db.get(query1, function (err, row) {
+	db.get(query, function (err, res) {
 		if (err ) {
 			cb(true, 'Check for temp table resulted in error: ' + err);
 		} else {
 			try {
-				if (row.hasOwnProperty('count') && Number(row.count) > 0) {
+				if (res.hasOwnProperty('count') && Number(res.count) > 0) {
 					db.run('DROP TABLE temp');
 				}
 			} catch (e) {
-				cb(true, 'Error during parse of row, count: ' + err);
+				cb(true, 'Error during parse of res, count: ' + err);
 			}
 		}
 	});
@@ -161,9 +161,10 @@ function SQLcleanRows (cb) {
 														data.dist_from_stop
 													].join(',');
 								stream.write(row);
+								row = null; // dump row just in case
+								console.log('Current performance: ', process.memoryUsage());
 							}
 						}, function (error, responseLength) {
-							if (db.open) db.close();
 							// now we need to compress the file
 							var gzip = zlib.createGzip({level: 9});
 							var inp = fs.createReadStream('uniqueRows_dailyArchive.csv');
@@ -174,6 +175,7 @@ function SQLcleanRows (cb) {
 									if (error || !(stats.hasOwnProperty('size') && !isNaN(stats.size))) {
 										cb(true, stats)
 									} else {
+										db.run('DROP TABLE temp', function () { if (db.open) db.close(); });
 										cb(false, {all: all, cleaned: cleaned, size: stats.size});
 									}
 								});
