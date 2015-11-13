@@ -26,7 +26,7 @@ function timeBundler (dir, cb) {
 				if (res.hasOwnProperty('entries') && res.entries.hasOwnProperty('length') && res.entries.length > 0) {
 
 					var files = res.entries.map(function (ea) { return ea.name; });
-files = files.splice(0,3); ////////!!!!!!!!!!!!!!!!!
+
 					getAndProcessFile(0);
 
 					function getAndProcessFile (fileIndex) {
@@ -34,7 +34,7 @@ files = files.splice(0,3); ////////!!!!!!!!!!!!!!!!!
 
 						if (fileIndex >= (files.length - 1)) {
 							ALLDONE = true;
-
+							
 							SQLcleanRows(function (error, res) {
 								if (error) {
 									cb(true, 'Error during SQLcleanRows in getAndProcessFile: ' + res);
@@ -51,6 +51,7 @@ files = files.splice(0,3); ////////!!!!!!!!!!!!!!!!!
 							      if (error) {
 							      	console.log(true, 'Could not upload compressed file stream: ' + error);
 							      } else {
+							      	console.log('DONE: ', response, result);
 							        cb(false, {all: res.all, cleaned: res.cleaned});
 							      }
 									});
