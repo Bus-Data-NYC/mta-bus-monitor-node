@@ -159,7 +159,7 @@ function super_ops () {
 		console.log('Failed: Supply an MTA Bustime API key in order to run.');
 
 	} else {
-		var job = (process.argv[2] == undefined || process.argv[2] == 'archive') ? 'archive' : 'scrape',
+		var job = (process.argv[2] == undefined || process.argv[2] == 'scrape') ? 'scrape' : 'archive',
 				method = ((process.argv[3] == 'default') || (process.argv[3] == 'production')) ? 1 : Number(process.argv[3]),
 				researchLength = ((process.argv[4] !== undefined) && (isNaN(Number(process.argv[4])) == false)) ? Number(process.argv[4]) : ((process.argv[4] == 'production') ? 0 : 0),
 				intervalGlobal = null;
