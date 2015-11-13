@@ -3,3 +3,4 @@ node_modules/
 store/
 test.js
 archive.db
+uniqueRows_dailyArchive.*

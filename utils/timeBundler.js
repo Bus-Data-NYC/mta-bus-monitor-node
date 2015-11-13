@@ -1,4 +1,5 @@
 var sqlite3 = require('sqlite3').verbose();
+var fs = require('fs');
 
 var SQLrefreshTable = require('./timeBundlerSQLib').SQLrefreshTable;
 var SQLnewRows = require('./timeBundlerSQLib').SQLnewRows;
@@ -10,7 +11,6 @@ var azure = require('azure-storage');
 var AZURECREDS = credentials.azure;
 
 function timeBundler (dir, cb) {
-	SQLrefreshTable();
 
 	var globalErrors = [],
 			ALLDONE = false;
@@ -18,6 +18,7 @@ function timeBundler (dir, cb) {
 	var bSvc = azure.createBlobService(AZURECREDS.temp.account, AZURECREDS.temp.key);
 
 	try {
+		SQLrefreshTable();
 		bSvc.listBlobsSegmented(dir, null, function(err, res) {
 			if (err) {
 				cb(true, 'Failed during listBlobsSegmented callback.');
@@ -25,26 +26,36 @@ function timeBundler (dir, cb) {
 				if (res.hasOwnProperty('entries') && res.entries.hasOwnProperty('length') && res.entries.length > 0) {
 
 					var files = res.entries.map(function (ea) { return ea.name; });
-
+files = files.splice(0,3); ////////!!!!!!!!!!!!!!!!!
 					getAndProcessFile(0);
 
 					function getAndProcessFile (fileIndex) {
 						console.log('Running getAndProcessFile on file ' + files[fileIndex] + ' (' + fileIndex + '/' + (files.length - 1) + ')');
 
 						if (fileIndex >= (files.length - 1)) {
-							// end game
 							ALLDONE = true;
-							console.log('DONE');
 
-							SQLcleanRows(function (error, errorMessage) {
+							SQLcleanRows(function (error, res) {
 								if (error) {
-									cb(true, 'Error during SQLcleanRows in getAndProcessFile: ' + errorMessage);
+									cb(true, 'Error during SQLcleanRows in getAndProcessFile: ' + res);
 								} else {
 									var archiveSvc = azure.createBlobService(AZURECREDS.archive.account, AZURECREDS.archive.key);
-									
+									var inLength = Number(res.size);
+									var inStream = fs.createReadStream('uniqueRows_dailyArchive.csv.gz');
+
+									var d = dir.split('-');
+									var container = d[0];
+									var blobName = d[1] + '/' + d[2] + '.csv.gz';
+
+									archiveSvc.createBlockBlobFromStream(container, blobName, inStream, inLength, function (error, result, response) {
+							      if (error) {
+							      	console.log(true, 'Could not upload compressed file stream: ' + error);
+							      } else {
+							        cb(false, {all: res.all, cleaned: res.cleaned});
+							      }
+									});
 								}
 							});
-
 
 						} else {
 							var file = files[fileIndex];

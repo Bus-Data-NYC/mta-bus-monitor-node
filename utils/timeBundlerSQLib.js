@@ -8,7 +8,7 @@ function initializeSQLite (argument) {
 	if (!exists) { fs.openSync(file, 'w'); }
 
 	// check if the table exists already and, if so, clear it
-	var query1 = "SELECT count(type) as count FROM sqlite_master WHERE type='table' AND name='temp';";
+	var query1 = "SELECT count(type) as count FROM sqlite_master WHERE type='table' AND name='temp'";
 	var db = new sqlite3.Database(file);
 	db.get(query1, function (err, row) {
 		if (err ) {
@@ -26,7 +26,7 @@ function initializeSQLite (argument) {
 };
 
 
-function SQLrefreshTable (argument) {
+function SQLrefreshTable () {
 	var db = new sqlite3.Database('archive.db');
 
 	var create_table_query = "CREATE TABLE temp (" + 
@@ -45,7 +45,7 @@ function SQLrefreshTable (argument) {
 	  ");";
 
 	db.serialize(function() {
-		var query1 = "SELECT count(type) as count FROM sqlite_master WHERE type='table' AND name='temp';";
+		var query1 = "SELECT count(type) as count FROM sqlite_master WHERE type='table' AND name='temp'";
 		db.get(query1, function (err, row) {
 			if (err) {
 				cb(true, 'Check for temp table resulted in error: ' + err);
@@ -142,7 +142,6 @@ function SQLcleanRows (cb) {
 						cb(true, 'Failed during "SELECT COUNT(*) AS count FROM temp WHERE rowid IN (SELECT MIN(rowid) FROM temp GROUP BY timestamp, trip_id)"');
 					} else {
 						cleaned = Number(data.count);
-
 						db.each("SELECT * FROM temp WHERE rowid IN (SELECT MIN(rowid) FROM temp GROUP BY timestamp, trip_id)", function (error, data) {
 							if (error) {
 								cb(true, 'Failed during "SELECT COUNT(*) AS count FROM temp WHERE rowid IN (SELECT MIN(rowid) FROM temp GROUP BY timestamp, trip_id)"');
@@ -164,13 +163,21 @@ function SQLcleanRows (cb) {
 								stream.write(row);
 							}
 						}, function (error, responseLength) {
-							db.close();
+							if (db.open) db.close();
 							// now we need to compress the file
 							var gzip = zlib.createGzip({level: 9});
 							var inp = fs.createReadStream('uniqueRows_dailyArchive.csv');
 							var out = fs.createWriteStream('uniqueRows_dailyArchive.csv.gz');
 							inp.pipe(gzip).pipe(out);
-							inp.on('finish', function () { cb(false, null); });
+							out.on('finish', function () {
+								fs.stat('uniqueRows_dailyArchive.csv.gz', function (error, stats) {
+									if (error || !(stats.hasOwnProperty('size') && !isNaN(stats.size))) {
+										cb(true, stats)
+									} else {
+										cb(false, {all: all, cleaned: cleaned, size: stats.size});
+									}
+								});
+							});
 						});
 					}
 				});
