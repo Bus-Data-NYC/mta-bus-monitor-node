@@ -226,10 +226,6 @@ function super_ops () {
 };
 
 
-(function wait () {
-	console.log(process.memoryUsage());
-	if (true) setTimeout(wait, 100000);})();
-
 // onload logic
 // application run directly; start app server
 if (require.main === module) super_ops();
