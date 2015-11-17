@@ -194,8 +194,10 @@ function super_ops () {
 	var lastBundleRun = null,
 			bundlerRunning = false;
 	function bundler () {
-		setTimeout(function () { 
+		setTimeout(function () {
+			var startTime = new Date();
 			bundlerRunning = true;
+
 			var latest = new Date(Date.now()),
 					y = latest.getUTCFullYear(),
 					m = latest.getUTCMonth() + 1, // months are zero-based in JS, go figure
@@ -205,15 +207,17 @@ function super_ops () {
 			if (Number(d) < 10) d = String(0) + String(d);
 			var dir = y + '-' + m + '-' + d;
 
-			if (lastBundleRun !== d) {
-				lastBundleRun = d;
+			if (lastBundleRun !== dir) {
+				lastBundleRun = dir;
 				timeBundler(dir, function (err, res) {
 					bundlerRunning = false;
+					console.log('DONE:\r\n  timeBundler completed in ' + dateDiff() + ' minutes.\r\nRESULTS:');
+
 					if (err) { 
 						lastBundleRun = null;
-						emailError('Error returned in bundler callback: ' + res); 
+						emailError('  Error returned in bundler callback: ' + res); 
 					} else {
-						console.log('Archive complete for: ' + dir + '. Cleaned ' + res.all +
+						console.log('  Archive complete for: ' + dir + '. Cleaned ' + res.all +
 												' files down to ' + res.cleaned + ', at ' + (res.size/1000000).toFixed(2) + ' mb. (' + 
 												(100*res.cleaned/res.all).toFixed(2) + '% efficiency.)');
 					}
@@ -222,6 +226,12 @@ function super_ops () {
 				bundler();
 			}
 		}, 6000);
+	};
+
+	function dateDiff (startTime) {
+		var endTime = new Date();
+		var diff = endTime - startTime;
+		return (diff/60000).toFixed(2);
 	};
 };
 
