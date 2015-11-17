@@ -175,7 +175,7 @@ function super_ops () {
 			if (researchLength > 0)
 				setTimeout(function () { kill(); }, researchLength);
 		} else if ((method == 1 || method == 2 || method == 3) && (job == 'scrape')) {
-			console.log('Running method ' + method + 'in scrape mode.');
+			console.log('Running method ' + method + ' in scrape mode.');
 			intervalGlobal = true;
 			runCall(method);
 			if (researchLength > 0)
