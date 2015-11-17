@@ -9,14 +9,13 @@ var sqlite3 = require('sqlite3').verbose();
 // Global performance measures
 var peakStats = {rss: 0, heapTotal: 0, heapUsed: 0};
 var db = new sqlite3.Database('archive.db');
-console.log(db);
 
 
 // use to run whole process
-createDummyDB();
+// createDummyDB();
 
 // use to run just the sql extract and csv write part
-// csvWrite();
+csvWrite();
 
 
 
@@ -188,7 +187,7 @@ function csvWrite () {
 						};
 					} else {
 						var rowid = chunked[index][chunked[index].length - 1];
-						var q = "SELECT * FROM temp WHERE rowid IN (SELECT MIN(rowid) AND rowid > " + rowid + " FROM temp GROUP BY timestamp, trip_id) LIMIT 15000;"
+						var q = "SELECT * FROM temp WHERE rowid > " + rowid + " AND rowid IN (SELECT MIN(rowid) FROM temp GROUP BY timestamp, trip_id) LIMIT 15000;"
 
 						db.all(q, function (error, data) {
 							if (error) {
