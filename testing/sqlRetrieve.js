@@ -11,7 +11,15 @@ var peakStats = {rss: 0, heapTotal: 0, heapUsed: 0};
 var db = new sqlite3.Database('archive.db');
 console.log(db);
 
-csvWrite();
+
+// use to run whole process
+createDummyDB();
+
+// use to run just the sql extract and csv write part
+// csvWrite();
+
+
+
 
 function createDummyDB () {
 	logOps('Start by creating archive.db and table "temp". Current Mem: ', process.memoryUsage());
@@ -69,16 +77,8 @@ function addDumbRows () {
 		}
 		rows.push(row);
 	}
-	logOps('Done creating 3000000 rows dumbie file.');
-	SQLnewRows(rows, function () {
-		logOps('Before dumping rows var.');
-		rows = null;
-		logOps('Done uploading to SQL the 3000000 dumbie rows.');
-		csvWrite();
-	})
-};
-
-function SQLnewRows (rows, cb) {
+	logOps('Done creating 3000000 rows dumby file.');
+	
 	try {
 		if (rows.length > 0) {
 			var chunked = [];
@@ -123,20 +123,20 @@ function SQLnewRows (rows, cb) {
 				db.run(sqlInsert, function () {
 					chunkIndex = chunkIndex + 1;
 					if (chunkIndex >= chunked.length) {
+						logOps('Done uploading to SQL the 3000000 dumby rows.');
 						rows = null;
-						cb(false, null); // finished with all
+						csvWrite();
 					} else {
 						runInsert(chunkIndex);
 					}
 				});
 			};
-
 		}
 	} catch (e) {
 		console.log('Caught error.' + e);
-		cb(true, 'Unknown error occured during SQLnewRows: ' + e);
 	}
 };
+
 
 
 function csvWrite () {
