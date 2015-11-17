@@ -195,7 +195,7 @@ function csvWrite () {
 								logOps('Failed during "SELECT * FROM temp LIMIT 10;" ' + error);
 								return false;
 							} else {
-								logOps('Retrieved all results for chunk ' + index + '.');
+								logOps('Retrieved all results for chunk ' + index + ' out of ' + (chunked.length - 1) + '.');
 
 								data.forEach(function (d, i) {
 									var row = '\r\n' + [
