@@ -6,15 +6,14 @@ var fs = require('fs');
 var zlib = require('zlib');
 var sqlite3 = require('sqlite3').verbose();
 
+// Global performance measures
+var peakStats = {rss: 0, heapTotal: 0, heapUsed: 0};
+var db = new sqlite3.Database('archive.db');
+console.log(db);
 
+csvWrite();
 
-
-
-function  () {
-	// Global performance measures
-	var peakStats = {rss: 0, heapTotal: 0, heapUsed: 0};
-
-	var db = new sqlite3.Database('../archive.db');
+function createDummyDB () {
 	logOps('Start by creating archive.db and table "temp". Current Mem: ', process.memoryUsage());
 
 	var file = 'archive.db';
@@ -75,7 +74,7 @@ function addDumbRows () {
 		logOps('Before dumping rows var.');
 		rows = null;
 		logOps('Done uploading to SQL the 3000000 dumbie rows.');
-		if (db.open) db.close();
+		csvWrite();
 	})
 };
 
@@ -124,7 +123,6 @@ function SQLnewRows (rows, cb) {
 				db.run(sqlInsert, function () {
 					chunkIndex = chunkIndex + 1;
 					if (chunkIndex >= chunked.length) {
-						if (db.open) db.close();
 						rows = null;
 						cb(false, null); // finished with all
 					} else {
@@ -141,6 +139,101 @@ function SQLnewRows (rows, cb) {
 };
 
 
+function csvWrite () {
+	try {
+		var stream = fs.createWriteStream('uniqueRows_dailyArchive.csv', {flags: 'w'});
+		stream.write(['timestamp', 'vehicle_id', 'latitude', 'longitude', 'bearing', 'progress', 'service_date', 'trip_id', 'block_assigned', 'next_stop_id', 'dist_along_route', 'dist_from_stop'].join(','));
+
+		logOps('Right before getting all result rowids.')
+		db.all("SELECT rowid FROM temp", function (error, res) {
+			if (error) {
+				logOps('Failed on getting count number: ' + error);
+			} else {
+				res = res.map(function (ea) { return ea.rowid; });
+				logOps('There are ' + res.length + ' rows of unique results.');
+
+				var chunked = [];
+				while (res.length > 0) { chunked.push(res.splice(0,15000)); };
+				res = null;
+
+				logOps(chunked.length + ' chunked lists created. Starting stream process.');
+
+				getPortion(0);
+
+				function getPortion (index) {
+
+					if (index >= chunked.length) {
+						stream.end();
+
+						// now we need to compress the file
+						var gzip = zlib.createGzip({level: 9});
+						var inp = fs.createReadStream('uniqueRows_dailyArchive.csv');
+						var out = fs.createWriteStream('uniqueRows_dailyArchive.csv.gz');
+						inp.pipe(gzip).pipe(out);
+						out.on('finish', function () {
+							fs.stat('uniqueRows_dailyArchive.csv.gz', function (error, stats) {
+								if (error || !(stats.hasOwnProperty('size') && !isNaN(stats.size))) {
+									complete('Failed ' + dateDiff() + ' minutes: ' + error);
+								} else {
+									db.run('DROP TABLE temp', function () {
+										if (db.open) db.close();
+										complete('All processes completed in ' + dateDiff() + ' minutes.');
+									});
+									cb(false, {all: all, cleaned: cleaned, size: stats.size});
+								}
+							});
+						});
+
+						function complete (msg) {
+							console.log(msg);
+							console.log('\r\nPerformance peaks:  \r\n  rss: ' + neatNum(peakStats.rss) + 
+																									'\r\n  heapTotal: ' + neatNum(peakStats.heapTotal) + 
+																									'\r\n  heapUsed: ' + neatNum(peakStats.heapUsed) + '\r\n');
+						};
+					} else {
+						var rowid = chunked[index][chunked[index].length - 1];
+						var q = "SELECT * FROM temp WHERE rowid IN (SELECT MIN(rowid) AND rowid > " + rowid + " FROM temp GROUP BY timestamp, trip_id) LIMIT 15000;"
+
+						db.all(q, function (error, data) {
+							if (error) {
+								logOps('Failed during "SELECT * FROM temp LIMIT 10;" ' + error);
+								return false;
+							} else {
+								logOps('Retrieved all results for chunk ' + index + '.');
+
+								data.forEach(function (d, i) {
+									var row = '\r\n' + [
+															d.timestamp, 
+															d.vehicle_id,
+															d.latitude,
+															d.longitude,
+															d.bearing,
+															d.progress,
+															d.service_date,
+															d.trip_id,
+															d.block_assigned,
+															d.next_stop_id,
+															d.dist_along_route,
+															d.dist_from_stop
+														].join(',');
+									stream.write(row);
+									row = d = null; // dump row + data just in case
+								});
+
+								data = error = null;
+								getPortion(index + 1);
+								return false;
+							}
+						});
+					}
+				};
+			}
+		});
+	} catch (e) {
+		console.log(true, 'Unknown error occured during SQLcleanRows: ' + e);
+	}
+}
+
 
 
 
@@ -151,23 +244,24 @@ function logOps (msg) {
 	if (msg !== undefined) console.log(msg + '\r\n\r\n');
 
 	var currMem = process.memoryUsage();
+	var pct = null;
 	var changes = [];
 
 	if (peakStats.rss < currMem.rss) {
-		var pct = (((currMem.rss/peakStats.rss) - 1) * 100).toFixed(1).toString() + '%';
-		changes.push('rss increased ' + pct + ' from ' + peakStats.rss + ' to ' + currMem.rss + '.');
+		pct = (((currMem.rss/peakStats.rss) - 1) * 100).toFixed(1).toString() + '%';
+		changes.push('rss increased ' + pct + ' from ' + neatNum(peakStats.rss) + ' to ' + neatNum(currMem.rss) + ' MB.');
 		peakStats.rss = currMem.rss;
 	}
 
 	if (peakStats.heapTotal < currMem.heapTotal) {
-		var pct = (((currMem.heapTotal/peakStats.heapTotal) - 1) * 100).toFixed(1).toString() + '%';
-		changes.push('heapTotal increased ' + pct + ' from ' + peakStats.heapTotal + ' to ' + currMem.heapTotal + '.');
+		pct = (((currMem.heapTotal/peakStats.heapTotal) - 1) * 100).toFixed(1).toString() + '%';
+		changes.push('heapTotal increased ' + pct + ' from ' + neatNum(peakStats.heapTotal) + ' to ' + neatNum(currMem.heapTotal) + ' MB.');
 		peakStats.heapTotal = currMem.heapTotal;
 	}
 
 	if (peakStats.heapUsed < currMem.heapUsed) {
-		var pct = (((currMem.heapUsed/peakStats.heapUsed) - 1) * 100).toFixed(1).toString() + '%';
-		changes.push('heapUsed increased ' + pct + ' from ' + peakStats.heapUsed + ' to ' + currMem.heapUsed + '.');
+		pct = (((currMem.heapUsed/peakStats.heapUsed) - 1) * 100).toFixed(1).toString() + '%';
+		changes.push('heapUsed increased ' + pct + ' from ' + neatNum(peakStats.heapUsed) + ' to ' + neatNum(currMem.heapUsed) + ' MB.');
 		peakStats.heapUsed = currMem.heapUsed;
 	}
 
@@ -177,85 +271,24 @@ function logOps (msg) {
 	}
 };
 
-function retrieveAllRows () {
-	
+function neatNum (x) {
+	x = (x/1000000).toFixed(2);
+  var parts = x.toString().split(".");
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return parts.join(".");
 }
 
+var startTime = new Date();
+function dateDiff (datepart) {
+	if (datepart == undefined) datepart = 'm';
+	else datepart = datepart.toLowerCase();
 
-
-
-
-//////////////////
-function SQLcleanRows () {
-	var db = new sqlite3.Database('archive.db');
-	try {
-		// globals
-		var all, cleaned;
-		var stream = fs.createWriteStream('uniqueRows_dailyArchive.csv', {flags: 'w'});
-		stream.write(['timestamp', 'vehicle_id', 'latitude', 'longitude', 'bearing', 'progress', 'service_date', 'trip_id', 'block_assigned', 'next_stop_id', 'dist_along_route', 'dist_from_stop'].join(','));
-
-		db.get("SELECT COUNT(*) AS count FROM temp", function (error, data) {
-			if (error) {
-				logOps('Failed during "SELECT COUNT(*) AS count FROM temp"');
-			} else {
-				all = Number(data.count);
-
-				db.get("SELECT COUNT(*) AS count FROM temp WHERE rowid IN (SELECT MIN(rowid) FROM temp GROUP BY timestamp, trip_id)", function (error, data) {
-					if (error) {
-						logOps('Failed during "SELECT COUNT(*) AS count FROM temp WHERE rowid IN (SELECT MIN(rowid) FROM temp GROUP BY timestamp, trip_id)"');
-					} else {
-						cleaned = Number(data.count);
-
-						logOps('Right before getting all results')
-						// dropped " WHERE rowid IN (SELECT MIN(rowid) FROM temp GROUP BY timestamp, trip_id)" for the time being since dummy file
-						db.all("SELECT * FROM temp", function (error, data, ind) {
-							if (error) {
-								logOps('Failed during "SELECT COUNT(*) AS count FROM temp WHERE rowid IN (SELECT MIN(rowid) FROM temp GROUP BY timestamp, trip_id)"');
-							} else {
-								var row = '\r\n' + [
-														data.timestamp, 
-														data.vehicle_id,
-														data.latitude,
-														data.longitude,
-														data.bearing,
-														data.progress,
-														data.service_date,
-														data.trip_id,
-														data.block_assigned,
-														data.next_stop_id,
-														data.dist_along_route,
-														data.dist_from_stop
-													].join(',');
-								stream.write(row);
-								
-								row = data = null; // dump row + data just in case
-
-								console.log('Current performance: ', ind, process.memoryUsage());
-							}
-						}, function (error, responseLength) {
-							console.log('done with all');
-							// // now we need to compress the file
-							// var gzip = zlib.createGzip({level: 9});
-							// var inp = fs.createReadStream('uniqueRows_dailyArchive.csv');
-							// var out = fs.createWriteStream('uniqueRows_dailyArchive.csv.gz');
-							// inp.pipe(gzip).pipe(out);
-							// out.on('finish', function () {
-							// 	fs.stat('uniqueRows_dailyArchive.csv.gz', function (error, stats) {
-							// 		if (error || !(stats.hasOwnProperty('size') && !isNaN(stats.size))) {
-							// 			console.log(true, stats);
-							// 		} else {
-							// 			db.run('DROP TABLE temp', function () { if (db.open) db.close(); });
-							// 			console.log(false, {all: all, cleaned: cleaned, size: stats.size});
-							// 		}
-							// 	});
-							// });
-						});
-					}
-				});
-			}
-		});
-	} catch (e) {
-		console.log(true, 'Unknown error occured during SQLcleanRows: ' + e);
-	}
+	var endTime = new Date();
+	var diff = endTime - startTime;
+	return (diff/60000).toFixed(2);
 };
+
+
+
+
 
