@@ -175,11 +175,7 @@ function csvWrite () {
 								if (error || !(stats.hasOwnProperty('size') && !isNaN(stats.size))) {
 									complete('Failed ' + dateDiff() + ' minutes: ' + error);
 								} else {
-									db.run('DROP TABLE temp', function () {
-										if (db.open) db.close();
-										complete('All processes completed in ' + dateDiff() + ' minutes.');
-									});
-									cb(false, {all: all, cleaned: cleaned, size: stats.size});
+									complete('All processes completed in ' + dateDiff() + ' minutes.');
 								}
 							});
 						});
