@@ -144,15 +144,19 @@ function csvWrite () {
 		stream.write(['timestamp', 'vehicle_id', 'latitude', 'longitude', 'bearing', 'progress', 'service_date', 'trip_id', 'block_assigned', 'next_stop_id', 'dist_along_route', 'dist_from_stop'].join(','));
 
 		logOps('Right before getting all result rowids.')
-		db.all("SELECT rowid FROM temp", function (error, res) {
+
+		var q1 = "SELECT rowid FROM temp WHERE rowid IN (SELECT MIN(rowid) FROM temp GROUP BY timestamp, trip_id)";
+		db.all(q1, function (error, res) {
 			if (error) {
 				logOps('Failed on getting count number: ' + error);
 			} else {
 				res = res.map(function (ea) { return ea.rowid; });
 				logOps('There are ' + res.length + ' rows of unique results.');
 
+				var chunkLen = 15000;
+
 				var chunked = [];
-				while (res.length > 0) { chunked.push(res.splice(0,15000)); };
+				while (res.length > 0) { chunked.push(res.splice(0, chunkLen)); };
 				res = null;
 
 				logOps(chunked.length + ' chunked lists created. Starting stream process.');
@@ -160,7 +164,6 @@ function csvWrite () {
 				getPortion(0);
 
 				function getPortion (index) {
-
 					if (index >= chunked.length) {
 						stream.end();
 
@@ -179,17 +182,11 @@ function csvWrite () {
 							});
 						});
 
-						function complete (msg) {
-							console.log(msg);
-							console.log('\r\nPerformance peaks:  \r\n  rss: ' + neatNum(peakStats.rss) + 
-																									'\r\n  heapTotal: ' + neatNum(peakStats.heapTotal) + 
-																									'\r\n  heapUsed: ' + neatNum(peakStats.heapUsed) + '\r\n');
-						};
 					} else {
 						var rowid = chunked[index][chunked[index].length - 1];
-						var q = "SELECT * FROM temp WHERE rowid > " + rowid + " AND rowid IN (SELECT MIN(rowid) FROM temp GROUP BY timestamp, trip_id) LIMIT 15000;"
+						var q2 = "SELECT * FROM temp WHERE rowid > " + rowid + " AND rowid IN (SELECT MIN(rowid) FROM temp GROUP BY timestamp, trip_id) LIMIT " + chunkLen + ";"
 
-						db.all(q, function (error, data) {
+						db.all(q2, function (error, data) {
 							if (error) {
 								logOps('Failed during "SELECT * FROM temp LIMIT 10;" ' + error);
 								return false;
@@ -211,6 +208,7 @@ function csvWrite () {
 															d.dist_along_route,
 															d.dist_from_stop
 														].join(',');
+
 									stream.write(row);
 									row = d = null; // dump row + data just in case
 								});
@@ -233,6 +231,12 @@ function csvWrite () {
 
 
 
+function complete (msg) {
+	console.log(msg);
+	console.log('\r\nPerformance peaks:  \r\n  rss: ' + neatNum(peakStats.rss) + 
+																			'\r\n  heapTotal: ' + neatNum(peakStats.heapTotal) + 
+																			'\r\n  heapUsed: ' + neatNum(peakStats.heapUsed) + '\r\n');
+};
 
 // performance logging utilities
 function logOps (msg) {

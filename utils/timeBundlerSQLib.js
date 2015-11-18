@@ -131,56 +131,85 @@ function SQLcleanRows (cb) {
 		var stream = fs.createWriteStream('uniqueRows_dailyArchive.csv', {flags: 'w'});
 		stream.write(['timestamp', 'vehicle_id', 'latitude', 'longitude', 'bearing', 'progress', 'service_date', 'trip_id', 'block_assigned', 'next_stop_id', 'dist_along_route', 'dist_from_stop'].join(','));
 
-		db.get("SELECT COUNT(*) AS count FROM temp", function (error, data) {
+		var q1 = "SELECT COUNT(*) AS count FROM temp";
+		db.get(, function (error, data) {
 			if (error) {
-				cb(true, 'Failed during "SELECT COUNT(*) AS count FROM temp"');
+				cb(true, 'Failed during ' + q1);
 			} else {
 				all = Number(data.count);
 
-				db.get("SELECT COUNT(*) AS count FROM temp WHERE rowid IN (SELECT MIN(rowid) FROM temp GROUP BY timestamp, trip_id)", function (error, data) {
+				var q2 = "SELECT rowid FROM temp WHERE rowid IN (SELECT MIN(rowid) FROM temp GROUP BY timestamp, trip_id)";
+				db.get(q2, function (error, data) {
 					if (error) {
-						cb(true, 'Failed during "SELECT COUNT(*) AS count FROM temp WHERE rowid IN (SELECT MIN(rowid) FROM temp GROUP BY timestamp, trip_id)"');
+						cb(true, 'Failed during ' + q2);
 					} else {
-						cleaned = Number(data.count);
-						db.each("SELECT * FROM temp WHERE rowid IN (SELECT MIN(rowid) FROM temp GROUP BY timestamp, trip_id)", function (error, data) {
-							if (error) {
-								cb(true, 'Failed during "SELECT COUNT(*) AS count FROM temp WHERE rowid IN (SELECT MIN(rowid) FROM temp GROUP BY timestamp, trip_id)"');
+						data = data.map(function (ea) { return ea.rowid; });
+						cleaned = Number(data.length);
+
+						var chunked = [];
+						while (data.length > 0) { chunked.push(data.splice(0,15000)); };
+						data = null;
+
+						getPortion(0);
+
+						function getPortion (index) {
+							if (index >= chunked.length) {
+								stream.end()
+
+								// now we need to compress the file
+								var gzip = zlib.createGzip({level: 9});
+								var inp = fs.createReadStream('uniqueRows_dailyArchive.csv');
+								var out = fs.createWriteStream('uniqueRows_dailyArchive.csv.gz');
+								inp.pipe(gzip).pipe(out);
+								out.on('finish', function () {
+									fs.stat('uniqueRows_dailyArchive.csv.gz', function (error, stats) {
+										if (error || !(stats.hasOwnProperty('size') && !isNaN(stats.size))) {
+											cb(true, stats)
+										} else {
+											db.run('DROP TABLE temp', function () { if (db.open) db.close(); });
+											cb(false, {all: all, cleaned: cleaned, size: stats.size});
+										}
+									});
+								});
+
+								return false;
 							} else {
-								var row = '\r\n' + [
-														data.timestamp, 
-														data.vehicle_id,
-														data.latitude,
-														data.longitude,
-														data.bearing,
-														data.progress,
-														data.service_date,
-														data.trip_id,
-														data.block_assigned,
-														data.next_stop_id,
-														data.dist_along_route,
-														data.dist_from_stop
-													].join(',');
-								stream.write(row);
-								row = null; // dump row just in case
-								console.log('Current performance: ', process.memoryUsage());
-							}
-						}, function (error, responseLength) {
-							// now we need to compress the file
-							var gzip = zlib.createGzip({level: 9});
-							var inp = fs.createReadStream('uniqueRows_dailyArchive.csv');
-							var out = fs.createWriteStream('uniqueRows_dailyArchive.csv.gz');
-							inp.pipe(gzip).pipe(out);
-							out.on('finish', function () {
-								fs.stat('uniqueRows_dailyArchive.csv.gz', function (error, stats) {
-									if (error || !(stats.hasOwnProperty('size') && !isNaN(stats.size))) {
-										cb(true, stats)
+								var rowid = chunked[index][chunked[index].length - 1];
+								var q3 = "SELECT * FROM temp WHERE rowid IN (SELECT MIN(rowid) AND rowid > " + rowid + " FROM temp GROUP BY timestamp, trip_id) LIMIT 15000;"
+
+								db.all(q3, function (error, data) {
+									if (error) {
+										logOps('Failed during "SELECT * FROM temp LIMIT 10;" ' + error);
+										return false;
 									} else {
-										db.run('DROP TABLE temp', function () { if (db.open) db.close(); });
-										cb(false, {all: all, cleaned: cleaned, size: stats.size});
+										logOps('Retrieved all results for chunk ' + index + '.');
+
+										data.forEach(function (d, i) {
+											var row = '\r\n' + [
+																	d.timestamp, 
+																	d.vehicle_id,
+																	d.latitude,
+																	d.longitude,
+																	d.bearing,
+																	d.progress,
+																	d.service_date,
+																	d.trip_id,
+																	d.block_assigned,
+																	d.next_stop_id,
+																	d.dist_along_route,
+																	d.dist_from_stop
+																].join(',');
+											stream.write(row);
+											row = d = null; // dump row + data just in case
+										});
+
+										data = error = null;
+										getPortion(index + 1);
+										return false;
 									}
 								});
-							});
-						});
+							}
+						};
 					}
 				});
 			}
