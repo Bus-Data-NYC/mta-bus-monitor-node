@@ -211,8 +211,6 @@ function super_ops () {
 		var dir = y + '-' + m + '-' + d;
 
 		timeBundler(dir, function (err, res) {
-			console.log('DONE: timeBundler completed in ' + dateDiff() + ' minutes.\r\n  Note: Results are emailed.');
-
 			if (err) {
 				emailError('Error on try #' + attemptNum + '. Error log returned in bundler callback: ' + res);
 
@@ -224,6 +222,12 @@ function super_ops () {
 				emailError('Archive successfully complete for: ' + dir + '. Cleaned ' + res.all +
 										' files down to ' + res.cleaned + ', at ' + (res.size/1000000).toFixed(2) + ' mb. (' + 
 										(100*res.cleaned/res.all).toFixed(2) + '% efficiency.)');
+
+				// terminate node, exit program
+				setTimeout(function () {
+					console.log('DONE: timeBundler completed in ' + dateDiff(startTime) + ' minutes. Results were emailed.');
+					process.exit();
+				}, 10000);
 			}
 		});
 	};

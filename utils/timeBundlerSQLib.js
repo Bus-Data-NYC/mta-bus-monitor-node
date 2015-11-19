@@ -42,7 +42,7 @@ function SQLrefreshTable () {
 			"next_stop_id TEXT, " +
 			"dist_along_route TEXT, " +
 			"dist_from_stop TEXT" +
-	  ");";
+		");";
 
 	db.serialize(function() {
 		var query1 = "SELECT count(type) as count FROM sqlite_master WHERE type='table' AND name='temp'";
@@ -139,7 +139,7 @@ function SQLcleanRows (cb) {
 				all = Number(data.count);
 
 				var q2 = "SELECT rowid FROM temp WHERE rowid IN (SELECT MIN(rowid) FROM temp GROUP BY timestamp, trip_id)";
-				db.get(q2, function (error, data) {
+				db.all(q2, function (error, data) {
 					if (error) {
 						cb(true, 'Failed during ' + q2);
 					} else {
@@ -172,18 +172,19 @@ function SQLcleanRows (cb) {
 										}
 									});
 								});
-
 								return false;
+
 							} else {
 								var rowid = chunked[index][chunked[index].length - 1];
 								var q3 = "SELECT * FROM temp WHERE rowid IN (SELECT MIN(rowid) AND rowid > " + rowid + " FROM temp GROUP BY timestamp, trip_id) LIMIT " + chunkLen + ";"
 
 								db.all(q3, function (error, data) {
 									if (error) {
-										logOps('Failed during "SELECT * FROM temp LIMIT 10;" ' + error);
+										cb(true, 'Failed during "SELECT * FROM temp LIMIT 10;" ' + error);
 										return false;
+
 									} else {
-										logOps('Retrieved all results for chunk ' + index + '.');
+										console.log('Retrieved all results for chunk ' + index + '.');
 
 										data.forEach(function (d, i) {
 											var row = '\r\n' + [

@@ -26,7 +26,7 @@ function timeBundler (dir, cb) {
 				if (res.hasOwnProperty('entries') && res.entries.hasOwnProperty('length') && res.entries.length > 0) {
 
 					var files = res.entries.map(function (ea) { return ea.name; }); 
-					
+
 					getAndProcessFile(0);
 
 					function getAndProcessFile (fileIndex) {

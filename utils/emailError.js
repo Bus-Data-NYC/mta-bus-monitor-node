@@ -26,7 +26,7 @@ if (credentials.nodemailer == undefined) {
 	emailError = function (errText) {
 		try {
 			var time = new Date(Date.now()).toUTCString(),
-					introPhrase = '<b>[Runtime Error] </b> Something happened at ' + time + ': <br>';
+					introPhrase = '<b>[Runtime Event] </b> Something happened at ' + time + ': <br>';
 			mailOptions.html = mailOptions.text = [introPhrase, errText].join(' ');
 			transporter.sendMail(mailOptions, function (error, info) {
 			  if (error) console.log(error, info);
