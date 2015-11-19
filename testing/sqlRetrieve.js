@@ -165,22 +165,25 @@ function csvWrite () {
 
 				function getPortion (index) {
 					if (index >= chunked.length) {
-						stream.end();
-
-						// now we need to compress the file
-						var gzip = zlib.createGzip({level: 9});
-						var inp = fs.createReadStream('uniqueRows_dailyArchive.csv');
-						var out = fs.createWriteStream('uniqueRows_dailyArchive.csv.gz');
-						inp.pipe(gzip).pipe(out);
-						out.on('finish', function () {
-							fs.stat('uniqueRows_dailyArchive.csv.gz', function (error, stats) {
-								if (error || !(stats.hasOwnProperty('size') && !isNaN(stats.size))) {
-									complete('Failed ' + dateDiff() + ' minutes: ' + error);
-								} else {
-									complete('All processes completed in ' + dateDiff() + ' minutes.');
-								}
+						// wait until entire stream has been written
+						stream.on('finish', function () {
+							// now we need to compress the file
+							var gzip = zlib.createGzip({level: 9});
+							var inp = fs.createReadStream('uniqueRows_dailyArchive.csv');
+							var out = fs.createWriteStream('uniqueRows_dailyArchive.csv.gz');
+							inp.pipe(gzip).pipe(out);
+							out.on('finish', function () {
+								fs.stat('uniqueRows_dailyArchive.csv.gz', function (error, stats) {
+									if (error || !(stats.hasOwnProperty('size') && !isNaN(stats.size))) {
+										complete('Failed ' + dateDiff() + ' minutes: ' + error);
+									} else {
+										complete('All processes completed in ' + dateDiff() + ' minutes. File size: ' + stats.size);
+									}
+								});
 							});
 						});
+
+						stream.end();
 
 					} else {
 						var rowid = chunked[index][chunked[index].length - 1];
@@ -191,7 +194,7 @@ function csvWrite () {
 								logOps('Failed during "SELECT * FROM temp LIMIT 10;" ' + error);
 								return false;
 							} else {
-								logOps('Retrieved all results for chunk ' + index + ' out of ' + (chunked.length - 1) + '.');
+								logOps('Retrieved all results for chunk ' + (index + 1) + ' out of ' + (chunked.length) + '.');
 
 								data.forEach(function (d, i) {
 									var row = '\r\n' + [

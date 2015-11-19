@@ -157,24 +157,26 @@ function SQLcleanRows (cb) {
 
 						function getPortion (index) {
 							if (index >= chunked.length) {
-								stream.end()
-
-								// now we need to compress the file
-								var gzip = zlib.createGzip({level: 9});
-								var inp = fs.createReadStream('uniqueRows_dailyArchive.csv');
-								var out = fs.createWriteStream('uniqueRows_dailyArchive.csv.gz');
-								inp.pipe(gzip).pipe(out);
-								out.on('finish', function () {
-									fs.stat('uniqueRows_dailyArchive.csv.gz', function (error, stats) {
-										if (error || !(stats.hasOwnProperty('size') && !isNaN(stats.size))) {
-											cb(true, stats)
-										} else {
-											db.run('DROP TABLE temp', function () { if (db.open) db.close(); });
-											cb(false, {all: all, cleaned: cleaned, size: stats.size});
-										}
+								// wait until entire stream has been written
+								stream.on('finish', function () {
+									// now we need to compress the file
+									var gzip = zlib.createGzip({level: 9});
+									var inp = fs.createReadStream('uniqueRows_dailyArchive.csv');
+									var out = fs.createWriteStream('uniqueRows_dailyArchive.csv.gz');
+									inp.pipe(gzip).pipe(out);
+									out.on('finish', function () {
+										fs.stat('uniqueRows_dailyArchive.csv.gz', function (error, stats) {
+											if (error || !(stats.hasOwnProperty('size') && !isNaN(stats.size))) {
+												cb(true, stats)
+											} else {
+												db.run('DROP TABLE temp', function () { if (db.open) db.close(); });
+												cb(false, {all: all, cleaned: cleaned, size: stats.size});
+											}
+										});
 									});
 								});
-								return false;
+
+								stream.end();
 
 							} else {
 								var rowid = chunked[index][chunked[index].length - 1];
