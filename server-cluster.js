@@ -1,5 +1,7 @@
 var cluster = require('cluster');
 
+var job = (process.argv[2] == undefined || process.argv[2] == 'scrape') ? 'scrape' : 'archive';
+
 function startWorker() {
 		var worker = cluster.fork();
 		console.log('SERVER-CLUSTER_OPERATION: Starting worker %d of 1.', worker.id);
@@ -24,7 +26,11 @@ if(cluster.isMaster){
 		cluster.on('exit', function(worker, code, signal){
 				console.log('SERVER-CLUSTER_OPERATION: Worker %d died with exit code %d (%s)',
 						worker.id, code, signal);
-				startWorker();
+
+				// only start a new worked if in scrape mode
+				if (job == 'scrape') {
+					startWorker();
+				}
 		});
 
 } else {
