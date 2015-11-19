@@ -4,7 +4,7 @@ var credentials = require('../credentials.js');
 var emailError = function () { console.log('Error occured but not email information included so email alert not sent.'); };
 
 if (credentials.nodemailer == undefined) {
-	console.log('Warning: Missing email login information.');
+	console.log('Warning: Missing email login information. Logging will NOT be emailed.');
 
 } else {
 	var transporter = nodemailer.createTransport({
@@ -18,7 +18,7 @@ if (credentials.nodemailer == undefined) {
 	var mailOptions = {
     from: credentials.nodemailer.options.from,
     to: credentials.nodemailer.options.to,
-    subject: 'Bus Monitor Runtime Error',
+    subject: 'Bus Monitor Runtime Message',
     text: '',
     html: ''
 	};

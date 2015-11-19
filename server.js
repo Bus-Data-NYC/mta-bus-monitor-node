@@ -16,9 +16,52 @@ function super_ops () {
 			csvBundler = require('./utils/csvBundler.js').csvBundler,
 			timeBundler = require('./utils/timeBundler.js').timeBundler,
 			initializeSQLite = require('./utils/timeBundlerSQLib.js').initializeSQLite;
-			
 
 
+
+	// INITIALIZING PROCESSES
+
+	// operation to determine how to run repeated api calls
+	var mtakey = (process.argv[5] !== undefined) && (process.argv[5] !== 'default') ? process.argv[5] : credentials.mtakey,
+			url = 'http://api.prod.obanyc.com/api/siri/vehicle-monitoring.json?key=' + mtakey;
+
+	if (mtakey == undefined) {
+		console.log('Failed: Supply an MTA Bustime API key in order to run.');
+
+	} else {
+		var job = (process.argv[2] == undefined || process.argv[2] == 'scrape') ? 'scrape' : 'archive',
+				method = ((process.argv[3] == 'default') || (process.argv[3] == 'production')) ? 1 : Number(process.argv[3]),
+				researchLength = ((process.argv[4] !== undefined) && (isNaN(Number(process.argv[4])) == false)) ? Number(process.argv[4]) : ((process.argv[4] == 'production') ? 0 : 0),
+				intervalGlobal = null;
+
+		if (isNaN(method) || method < 0 || method > 3) { method = 1; }
+
+		// Method 0: run this every 30 seconds
+		// Method 1: run 30 seconds after first response from Bustime API
+		// Method 2: run 30 seconds after first portion of streamed data from Bustime API
+		// Method 3: run this 30 seconds in callback
+		if (method == 0) {
+			intervalGlobal = setInterval(function () { runCall(method); }, 30000);
+			if (researchLength > 0)
+				setTimeout(function () { kill(); }, researchLength);
+		} else if ((method == 1 || method == 2 || method == 3) && (job == 'scrape')) {
+			console.log('Running method ' + method + ' in scrape mode.');
+			intervalGlobal = true;
+			runCall(method);
+			if (researchLength > 0)
+				setTimeout(function () { kill(); }, researchLength);
+		} else if (job == 'archive') {
+			console.log('Running application in archive mode.');
+			initializeSQLite(); // initialize sqlite3 db
+			bundler();
+			if (researchLength > 0)
+				setTimeout(function () { kill(); }, researchLength);
+		}
+	};
+
+
+
+	// SCRAPE MODE OPS
 
 	function requestWithEncoding (url, method, cb) {
 		try {
@@ -136,96 +179,53 @@ function super_ops () {
 
 
 	function kill () {
-		console.log('Stopping calls, wrapping up.');
-		if (intervalGlobal == true) {
-			intervalGlobal = false;
-		} else {
-			if (job && job == 'scrape') {
-				clearInterval(intervalGlobal);
-			} else if (job && job == 'archive') {
-				lastBundleRun = 'STOP';
+		if (job == 'scrape') {
+			if (intervalGlobal == true) {
+				intervalGlobal = false;
 			} else {
-				console.log('Error occured during kill cycle.');
+				try {
+					clearInterval(intervalGlobal);
+				} catch (e) {
+					emailError('Failed attempt to run kill() process: ' + e);
+				}
 			}
 		}
 	};
 
 
-	// operation to determine how to run repeated api calls
-	var mtakey = (process.argv[5] !== undefined) && (process.argv[5] !== 'default') ? process.argv[5] : credentials.mtakey,
-			url = 'http://api.prod.obanyc.com/api/siri/vehicle-monitoring.json?key=' + mtakey;
 
-	if (mtakey == undefined) {
-		console.log('Failed: Supply an MTA Bustime API key in order to run.');
-
-	} else {
-		var job = (process.argv[2] == undefined || process.argv[2] == 'scrape') ? 'scrape' : 'archive',
-				method = ((process.argv[3] == 'default') || (process.argv[3] == 'production')) ? 1 : Number(process.argv[3]),
-				researchLength = ((process.argv[4] !== undefined) && (isNaN(Number(process.argv[4])) == false)) ? Number(process.argv[4]) : ((process.argv[4] == 'production') ? 0 : 0),
-				intervalGlobal = null;
-
-		if (isNaN(method) || method < 0 || method > 3) { method = 1; }
-
-		// Method 0: run this every 30 seconds
-		// Method 1: run 30 seconds after first response from Bustime API
-		// Method 2: run 30 seconds after first portion of streamed data from Bustime API
-		// Method 3: run this 30 seconds in callback
-		if (method == 0) {
-			intervalGlobal = setInterval(function () { runCall(method); }, 30000);
-			if (researchLength > 0)
-				setTimeout(function () { kill(); }, researchLength);
-		} else if ((method == 1 || method == 2 || method == 3) && (job == 'scrape')) {
-			console.log('Running method ' + method + ' in scrape mode.');
-			intervalGlobal = true;
-			runCall(method);
-			if (researchLength > 0)
-				setTimeout(function () { kill(); }, researchLength);
-		} else if (job == 'archive') {
-			console.log('Running application in archive mode.');
-			initializeSQLite(); // initialize sqlite3 db
-			bundler();
-			if (researchLength > 0)
-				setTimeout(function () { kill(); }, researchLength);
-		}
-	};
-
+	// ARCHIVE MODE OPS
 
 	// manage bundler operations every 100 min (6000000 ms) do a check
-	var lastBundleRun = null,
-			bundlerRunning = false;
+	var attemptNum = 0;
 	function bundler () {
-		setTimeout(function () {
-			var startTime = new Date();
-			bundlerRunning = true;
+		var startTime = new Date();
 
-			var latest = new Date(Date.now()),
-					y = latest.getUTCFullYear(),
-					m = latest.getUTCMonth() + 1, // months are zero-based in JS, go figure
-					d = latest.getUTCDate(); // days, too so already 1 behind
+		var latest = new Date(Date.now()),
+				y = latest.getUTCFullYear(),
+				m = latest.getUTCMonth() + 1, // months are zero-based in JS, go figure
+				d = latest.getUTCDate(); // days, too so already 1 behind
 
-			if (Number(m) < 10) m = String(0) + String(m);
-			if (Number(d) < 10) d = String(0) + String(d);
-			var dir = y + '-' + m + '-' + d;
+		if (Number(m) < 10) m = String(0) + String(m);
+		if (Number(d) < 10) d = String(0) + String(d);
+		var dir = y + '-' + m + '-' + d;
 
-			if (lastBundleRun !== dir) {
-				lastBundleRun = dir;
-				timeBundler(dir, function (err, res) {
-					bundlerRunning = false;
-					console.log('DONE:\r\n  timeBundler completed in ' + dateDiff() + ' minutes.\r\nRESULTS:');
+		timeBundler(dir, function (err, res) {
+			console.log('DONE: timeBundler completed in ' + dateDiff() + ' minutes.\r\n  Note: Results are emailed.');
 
-					if (err) { 
-						lastBundleRun = null;
-						emailError('  Error returned in bundler callback: ' + res); 
-					} else {
-						console.log('  Archive complete for: ' + dir + '. Cleaned ' + res.all +
-												' files down to ' + res.cleaned + ', at ' + (res.size/1000000).toFixed(2) + ' mb. (' + 
-												(100*res.cleaned/res.all).toFixed(2) + '% efficiency.)');
-					}
-				});
-			} else if (lastBundleRun !== 'STOP') {
-				bundler();
+			if (err) {
+				emailError('Error on try #' + attemptNum + '. Error log returned in bundler callback: ' + res);
+
+				// Give it a 5 tries to run before giving up completely
+				attemptNum += 1;
+				if (attemptNum < 5) { setTimeout(function () { bundler(); }, 5000) }
+
+			} else {
+				emailError('Archive successfully complete for: ' + dir + '. Cleaned ' + res.all +
+										' files down to ' + res.cleaned + ', at ' + (res.size/1000000).toFixed(2) + ' mb. (' + 
+										(100*res.cleaned/res.all).toFixed(2) + '% efficiency.)');
 			}
-		}, 6000);
+		});
 	};
 
 	function dateDiff (startTime) {
