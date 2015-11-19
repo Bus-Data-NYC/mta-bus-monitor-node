@@ -179,8 +179,8 @@ function SQLcleanRows (cb) {
 								stream.end();
 
 							} else {
-								var rowid = chunked[index][chunked[index].length - 1];
-								var q3 = "SELECT * FROM temp WHERE rowid IN (SELECT MIN(rowid) AND rowid > " + rowid + " FROM temp GROUP BY timestamp, trip_id) LIMIT " + chunkLen + ";"
+								var rowid = chunked[index - 1] == undefined ? 0 : chunked[index - 1][chunked[index - 1].length - 1];
+								var q3 = "SELECT * FROM temp WHERE rowid IN (SELECT MIN(rowid) FROM temp GROUP BY timestamp, trip_id) AND rowid > " + rowid + " LIMIT " + chunkLen + ";"
 
 								db.all(q3, function (error, data) {
 									if (error) {
@@ -188,7 +188,7 @@ function SQLcleanRows (cb) {
 										return false;
 
 									} else {
-										console.log('Retrieved all results for chunk ' + index + '.');
+										console.log('Retrieved all results for chunk ' + (index + 1) + ' out of ' + chunked.length + '.');
 
 										data.forEach(function (d, i) {
 											var row = '\r\n' + [

@@ -221,13 +221,15 @@ function super_ops () {
 			} else {
 				emailError('Archive successfully complete for: ' + dir + '. Cleaned ' + res.all +
 										' files down to ' + res.cleaned + ', at ' + (res.size/1000000).toFixed(2) + ' mb. (' + 
-										(100*res.cleaned/res.all).toFixed(2) + '% efficiency.)');
-
-				// terminate node, exit program
-				setTimeout(function () {
-					console.log('DONE: timeBundler completed in ' + dateDiff(startTime) + ' minutes. Results were emailed.');
-					process.exit();
-				}, 10000);
+										(100*res.cleaned/res.all).toFixed(2) + '% efficiency.)',
+					function () {
+						// terminate node, exit program
+						setTimeout(function () {
+							console.log('DONE: timeBundler completed in ' + dateDiff(startTime) + ' minutes. Results were emailed.');
+							process.exit();
+						}, 10000);
+					}
+				);
 			}
 		});
 	};

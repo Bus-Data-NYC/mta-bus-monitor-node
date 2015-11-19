@@ -23,13 +23,14 @@ if (credentials.nodemailer == undefined) {
     html: ''
 	};
 
-	emailError = function (errText) {
+	emailError = function (errText, cb) {
 		try {
 			var time = new Date(Date.now()).toUTCString(),
 					introPhrase = '<b>[Runtime Event] </b> Something happened at ' + time + ': <br>';
 			mailOptions.html = mailOptions.text = [introPhrase, errText].join(' ');
 			transporter.sendMail(mailOptions, function (error, info) {
 			  if (error) console.log(error, info);
+			  if (cb !== undefined) cb();
 			});
 		} catch (e) {
 			console.log('Error when trying to run emailError: ' + e);

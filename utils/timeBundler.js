@@ -30,11 +30,9 @@ function timeBundler (dir, cb) {
 						getAndProcessFile(0);
 
 						function getAndProcessFile (fileIndex) {
-							console.log('Running getAndProcessFile on file ' + files[fileIndex] + ' (' + fileIndex + '/' + (files.length - 1) + ')');
+							console.log('Running getAndProcessFile on file ' + files[fileIndex] + ' (' + (fileIndex + 1) + '/' + files.length + ')');
 
 							if (fileIndex >= (files.length - 1)) {
-								ALLDONE = true;
-
 								SQLcleanRows(function (error, res) {
 									if (error) {
 										cb(true, 'Error during SQLcleanRows in getAndProcessFile: ' + res);
@@ -51,6 +49,7 @@ function timeBundler (dir, cb) {
 								      if (error) {
 								      	cb(true, 'Could not upload compressed file stream: ' + error);
 								      } else {
+								      	ALLDONE = true;
 								        cb(false, res);
 								      }
 										});
