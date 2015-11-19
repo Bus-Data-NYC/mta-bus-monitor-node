@@ -26,7 +26,7 @@ function initializeSQLite (argument) {
 };
 
 
-function SQLrefreshTable () {
+function SQLrefreshTable (cb) {
 	var db = new sqlite3.Database('archive.db');
 
 	var create_table_query = "CREATE TABLE temp (" + 
@@ -55,10 +55,12 @@ function SQLrefreshTable () {
 						// run in cb since serialize seems to still be running them async
 						db.run(create_table_query);
 						db.close();
+						cb();
 					});
 				} else {
 					db.run(create_table_query);
 					db.close();
+					cb();
 				}
 			}
 		});
