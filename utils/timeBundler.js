@@ -26,7 +26,7 @@ function timeBundler (dir, cb) {
 					if (res.hasOwnProperty('entries') && res.entries.hasOwnProperty('length') && res.entries.length > 0) {
 
 						var files = res.entries.map(function (ea) { return ea.name; }); 
-
+files = files.splice(0,5);
 						getAndProcessFile(0);
 
 						function getAndProcessFile (fileIndex) {
@@ -49,8 +49,12 @@ function timeBundler (dir, cb) {
 								      if (error) {
 								      	cb(true, 'Could not upload compressed file stream: ' + error);
 								      } else {
-								      	ALLDONE = true;
-								        cb(false, res);
+												fs.unlink('uniqueRows_dailyArchive.csv', function () {
+													fs.unlink('uniqueRows_dailyArchive.csv.gz', function () {
+														ALLDONE = true;
+														cb(false, res);
+													});
+												});
 								      }
 										});
 									}

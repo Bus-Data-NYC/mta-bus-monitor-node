@@ -169,8 +169,10 @@ function SQLcleanRows (cb) {
 											if (error || !(stats.hasOwnProperty('size') && !isNaN(stats.size))) {
 												cb(true, stats)
 											} else {
-												db.run('DROP TABLE temp', function () { if (db.open) db.close(); });
-												cb(false, {all: all, cleaned: cleaned, size: stats.size});
+												db.run('DROP TABLE temp', function () {
+													if (db.open) db.close();
+													cb(false, {all: all, cleaned: cleaned, size: stats.size});
+												});
 											}
 										});
 									});
