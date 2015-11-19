@@ -132,7 +132,7 @@ function SQLcleanRows (cb) {
 		stream.write(['timestamp', 'vehicle_id', 'latitude', 'longitude', 'bearing', 'progress', 'service_date', 'trip_id', 'block_assigned', 'next_stop_id', 'dist_along_route', 'dist_from_stop'].join(','));
 
 		var q1 = "SELECT COUNT(*) AS count FROM temp";
-		db.get(, function (error, data) {
+		db.get(q1, function (error, data) {
 			if (error) {
 				cb(true, 'Failed during ' + q1);
 			} else {
@@ -146,8 +146,9 @@ function SQLcleanRows (cb) {
 						data = data.map(function (ea) { return ea.rowid; });
 						cleaned = Number(data.length);
 
-						var chunked = [];
-						while (data.length > 0) { chunked.push(data.splice(0,15000)); };
+						var chunked = [],
+								chunkLen = 15000;
+						while (data.length > 0) { chunked.push(data.splice(0,chunkLen)); };
 						data = null;
 
 						getPortion(0);
@@ -175,7 +176,7 @@ function SQLcleanRows (cb) {
 								return false;
 							} else {
 								var rowid = chunked[index][chunked[index].length - 1];
-								var q3 = "SELECT * FROM temp WHERE rowid IN (SELECT MIN(rowid) AND rowid > " + rowid + " FROM temp GROUP BY timestamp, trip_id) LIMIT 15000;"
+								var q3 = "SELECT * FROM temp WHERE rowid IN (SELECT MIN(rowid) AND rowid > " + rowid + " FROM temp GROUP BY timestamp, trip_id) LIMIT " + chunkLen + ";"
 
 								db.all(q3, function (error, data) {
 									if (error) {
