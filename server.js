@@ -15,7 +15,7 @@ function super_ops () {
 			processVehs = require('./utils/processVehs.js').processVehs,
 			csvBundler = require('./utils/csvBundler.js').csvBundler,
 			timeBundler = require('./utils/timeBundler.js').timeBundler,
-			initializeSQLite = require('./utils/timeBundlerSQLib.js').initializeSQLite;
+			initializeSQLite = require('./utils/initializeSQLite.js').initializeSQLite;
 
 
 
@@ -53,9 +53,13 @@ function super_ops () {
 		} else if (job == 'archive') {
 			console.log('Running application in archive mode.');
 			// initialize sqlite3 db, run bundler when done
-			initializeSQLite(function () { bundler(); });
-			if (researchLength > 0)
-				setTimeout(function () { kill(); }, researchLength);
+			initializeSQLite(function (err, msg) {
+				if (err) {
+					emailError(msg);
+				} else {
+					bundler();
+				}
+			});
 		}
 	};
 
