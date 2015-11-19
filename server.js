@@ -52,8 +52,8 @@ function super_ops () {
 				setTimeout(function () { kill(); }, researchLength);
 		} else if (job == 'archive') {
 			console.log('Running application in archive mode.');
-			initializeSQLite(); // initialize sqlite3 db
-			bundler();
+			// initialize sqlite3 db, run bundler when done
+			initializeSQLite(function () { bundler(); });
 			if (researchLength > 0)
 				setTimeout(function () { kill(); }, researchLength);
 		}

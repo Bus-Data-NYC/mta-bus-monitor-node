@@ -1,7 +1,7 @@
 var fs = require('fs');
 var sqlite3 = require("sqlite3").verbose();
 
-function initializeSQLite (argument) {
+function initializeSQLite (argument, cb) {
 	var file = 'archive.db';
 	var exists = fs.existsSync(file);
 
@@ -21,7 +21,9 @@ function initializeSQLite (argument) {
 		} else {
 			try {
 				if (row.hasOwnProperty('count') && Number(row.count) > 0) {
-					db.run('DROP TABLE temp');
+					db.run('DROP TABLE temp', function () {
+						if (cb !== undefined) cb()
+					});
 				}
 			} catch (e) {
 				cb(true, 'Error during parse of row, count: ' + err);
