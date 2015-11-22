@@ -12,6 +12,9 @@ To run: `npm start` + variables. There are a number of variables that enable the
 ### Scrape mode and archive mode
 Scrape will run an API call to MTA OBA Bustime API at roughly 30 second intervals (the timing of which can be adjusted via a customizable component, described later on). It will upload the resuling data to an Azure cloud database, the details of which are hosted in `credentials.js` under the key `azure`. There are two elements within that. The first is temp, which handles the scraped components and the second is `archive`, which is the blob service that holds the archived, compressed daily aggregates from 24 hours of scraping, run every new day according to UTC.
 
+### Setting up a CRON job for the archive mode
+If you want to set up the archiver to run once daily automatically, you can set up a CRON job to do so. Given that this project is based in NYC and UTC is 5 hours ahead, I suggest having the CRON job run at 6:00 AM UTC, which is 1 AM in NYC. Go to the root directory of this repo in your remote virtual machine or wherever you are running this.
+
 ### credentials.js
 The whole `credentials.js` file should look like the below, with your custom values entered in for each:
 ```
@@ -41,6 +44,9 @@ module.exports = {
 }
 ```
 
+
+## Old components likely to be removed soon, but enable some customizabilty
+
 #### Customizable components
 var2: Method number val (0,1,2, or 3)
 
@@ -50,12 +56,10 @@ var4: `mtakey` specfication. Default is one in your `credentials.js`. If none is
 
 
 #### Methods
-0: Run in the callback after everything has been returned and data compilation/gzip completed
-
-1: run 30 seconds after first response from Bustime API
-
-2: run 30 seconds after first portion of streamed data from Bustime API
-
+There are 4 methods that can be run.\r\n
+0: Run in the callback after everything has been returned and data compilation/gzip completed\r\n
+1: run 30 seconds after first response from Bustime API\r\n
+2: run 30 seconds after first portion of streamed data from Bustime API\r\n
 3: run this 30 seconds in callback (totally complete response)
 
 

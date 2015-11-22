@@ -128,14 +128,16 @@ function super_ops () {
 	function runCall (method) {
 		requestWithEncoding(url, method, function(err, data) {
 			try {
-				var t = new Date(Date.now()).toISOString().split('T'),
-						xmlIndex = data.indexOf('<?xml'),
-						errIndex = data.indexOf('Server Error');
+				var t = new Date(Date.now()).toISOString().split('T');
 
 				// sometimes we get returned xml for some reason, this handles that
-				if (typeof data == 'string' && xmlIndex > -1 && xmlIndex < 5) {
-					if (errIndex > -1) runCall(method); // sometimes server errors, try a second time right away
-					else emailError('Received XML instead of JSON: ' + data);
+				if (typeof data == 'string') {
+					var xmlIndex = data.indexOf('<?xml'),
+							merrIndex = data.indexOf('Server Error');
+					if (xmlIndex > -1 && xmlIndex < 5) {
+						if (errIndex > -1) runCall(method); // sometimes server errors, try a second time right away
+						else emailError('Received XML instead of JSON: ' + data);
+					}
 
 				} else {
 					if (err) {
