@@ -1,7 +1,3 @@
-
-
-
-
 var fs = require('fs');
 var zlib = require('zlib');
 var sqlite3 = require('sqlite3').verbose();
